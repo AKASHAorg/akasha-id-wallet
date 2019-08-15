@@ -60,7 +60,11 @@ class DIDclient {
       return this.loginLink
     }
 
-    async bootstrapNewLogin () {
+    /*  Bootstrap the login process.
+     *  @param {function} success Function to call when the process succeeds
+     *  @param {function} fail Function to call when the process fails
+     */
+    async bootstrapNewLogin (success, fail) {
       if (!this.loginLink) {
         await this.genLoginLink()
       }
@@ -71,10 +75,10 @@ class DIDclient {
           const msg = await crypto.decrypt(this.bootstrapKey, JSON.parse(data), 'base64')
           switch (msg.status) {
             case 'allowed':
-              this.acceptedLogin(msg.claim)
+              success(msg)
               break
             case 'denied':
-              this.rejectedLogin()
+              fail(msg)
               break
             default:
               throw new Error(`Unexpectedly received message with status ${msg.status}`)
