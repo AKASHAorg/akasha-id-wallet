@@ -5,6 +5,17 @@ const crypto = require('masq-common').crypto
 const HUB_URLS = [ 'localhost:8080' ]
 const WALLET_URL = 'http://localhost:3000'
 
+
+// Initialize the signalhub connection
+const initHub = (channel, hubUrls) => {
+  const hub = signalhub(channel, hubUrls)
+  // catch errors
+  hub.on('error', ({ url, error }) => {
+    throw(new Error('Websocket connection error', url, error))
+  })
+  return hub
+}
+
 class DIDclient {
     constructor (appName, appDescription, appImageURL, appURL, options = {}) {
       this.appName = appName
@@ -22,16 +33,15 @@ class DIDclient {
     }
 
     // Initialize the signalhub connection
-    async initHub (channel, callback) {
-      const hub = signalhub(channel, this.config.hubUrls)
-      // subscribe to the provided channel
-      hub.subscribe(channel).on('data', callback)
-      // catch errors
-      hub.on('error', ({ url, error }) => {
-        throw(new Error('Websocket connection error', url, error))
-      })
-      return hub
-    }
+    // initHub (channel) {
+    //   const hub = signalhub(channel, this.config.hubUrls)
+    //   // catch errors
+    //   hub.on('error', ({ url, error }) => {
+    //     throw(new Error('Websocket connection error', url, error))
+    //   })
+    //   return hub
+    // }
+
     // Generate a special link to request access to the user's DID
     async genLoginLink () {
       // generate a one time channel ID
@@ -51,9 +61,13 @@ class DIDclient {
     }
 
     async bootstrapNewLogin () {
-      await this.genLoginLink()
+      if (!this.loginLink) {
+        await this.genLoginLink()
+      }
+
       try {
-        this.initHub(this.loginChannel, (data) => {
+        const hub = initHub(this.loginChannel, this.config.hubUrls)
+        hub.subscribe(this.loginChannel).on('data', async (data) => {
           const msg = await crypto.decrypt(this.bootstrapKey, JSON.parse(data), 'base64')
           switch (msg.status) {
             case 'allowed':
@@ -72,6 +86,7 @@ class DIDclient {
     }
 
     async acceptedLogin (claim) {
+      // TODO verify claim
       console.log('Login accepted', claim)
       this.claim = claim
     }
@@ -87,8 +102,10 @@ class DIDwallet {
     this.config = {
       hubUrls: hubUrls ? hubUrls : HUB_URLS
     }
+    this.did = `did:akasha:${generateId()}`
   }
 
+  // Parse a base64 encoded login link
   parseLoginLink (hash) {
     const decoded = Buffer.from(hash, 'base64')
 
@@ -97,6 +114,17 @@ class DIDwallet {
     } catch (e) {
       console.error(e)
     }
+  }
+
+  async respondToLogin (rawKey, channel, claim, status) {
+    // init Websocket hub connection
+    const hub = initHub(channel, this.config.hubUrls)
+    // encrypt payload
+    const key = await crypto.importKey(Buffer.from(rawKey, 'base64'))
+    const encryptedMsg = await crypto.encrypt(key, {status, claim}, 'base64')
+
+    hub.broadcast(channel, JSON.stringify(encryptedMsg))
+    hub.close()
   }
 }
 
