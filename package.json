@@ -1,0 +1,20 @@
+{
+    "name": "akasha-id-lib",
+    "version": "1.0.0",
+    "description": "Common functions for Masq",
+    "main": "dist/akasha-id-lib.js",
+    "module": "src/index.js",
+    "scripts": {
+        "build": "webpack -p && cp ./dist/* ./test/"
+    },
+    "dependencies": {
+        "signalhub": "^4.9.0",
+        "masq-common": "git+https://github.com/QwantResearch/masq-common#v0.10.1"
+    },
+    "devDependencies": {
+        "babel": "^6.23.0",
+        "webpack": "^4.39.2",
+        "webpack-cli": "^3.3.6"
+    },
+    "author": "AKASHA"
+}
