@@ -5,6 +5,13 @@ const crypto = require('masq-common').crypto
 const HUB_URLS = [ 'localhost:8080' ]
 const WALLET_URL = 'http://localhost:3000'
 
+let DEBUGGING = false
+
+function debug() {
+  if ( DEBUGGING ) {
+      console.log.apply(this, arguments);
+  }
+}
 
 // Initialize the signalhub connection
 const initHub = (channel, hubUrls) => {
@@ -22,42 +29,41 @@ class DIDclient {
       this.appDescription = appDescription
       this.appImageURL = appImageURL
       this.appURL = appURL
-      // prepare hub
-      this.hub = undefined
       
       // init config
       this.config = {
         hubUrls: options.hubUrls ? options.hubUrls : HUB_URLS,
-        walletBaseUrl: options.walletBaseUrl ? options.walletBaseUrl : WALLET_URL
+        walletUrl: options.walletUrl ? options.walletUrl : WALLET_URL
       }
+      // debug
+      DEBUGGING = options.debug ? options.debug : false
     }
-
-    // Initialize the signalhub connection
-    // initHub (channel) {
-    //   const hub = signalhub(channel, this.config.hubUrls)
-    //   // catch errors
-    //   hub.on('error', ({ url, error }) => {
-    //     throw(new Error('Websocket connection error', url, error))
-    //   })
-    //   return hub
-    // }
 
     // Generate a special link to request access to the user's DID
     async genLoginLink () {
       // generate a one time channel ID
       this.loginChannel = generateId()
+      // generate NONCE
+      this.nonce = this.genNonce()
       // generate a one time symmetric encryption key and reveal it to AKASHA.id
       this.bootstrapKey = await crypto.genAESKey(true, 'AES-GCM', 128)
       const extractedKey = await crypto.exportKey(this.bootstrapKey)
       const b64Key = Buffer.from(extractedKey).toString('base64')
       // use the wallet app URL for the link
-      const loginUrl = new URL(this.config.walletBaseUrl)
-      const hashParams = JSON.stringify([this.appName, this.loginChannel, b64Key])
-      console.log(hashParams)
+      const loginUrl = new URL(this.config.walletUrl)
+      const hashParams = JSON.stringify([this.appName, this.loginChannel, b64Key, this.nonce])
       loginUrl.hash = '/link/' + Buffer.from(hashParams).toString('base64')
   
       this.loginLink = loginUrl.href
+      debug('Generated link from:', hashParams)
       return this.loginLink
+    }
+
+    // Generate a none
+    genNonce (min, max) {
+      min = Math.ceil(min || 100000)
+      max = Math.floor(max || 9999999)
+      return Math.floor(Math.random() * (max - min + 1)) + min
     }
 
     /*  Bootstrap the login process.
@@ -73,15 +79,20 @@ class DIDclient {
         const hub = initHub(this.loginChannel, this.config.hubUrls)
         hub.subscribe(this.loginChannel).on('data', async (data) => {
           const msg = await crypto.decrypt(this.bootstrapKey, JSON.parse(data), 'base64')
-          switch (msg.status) {
-            case 'allowed':
-              success(msg)
-              break
-            case 'denied':
-              fail(msg)
-              break
-            default:
-              throw new Error(`Unexpectedly received message with status ${msg.status}`)
+          if (msg.nonce && msg.nonce === this.nonce) {
+            switch (msg.status) {
+              case 'allowed':
+                success(msg)
+                break
+              case 'denied':
+                fail(msg)
+                break
+              default:
+                throw new Error(`Unexpectedly received message with status ${msg.status}`)
+            }
+            this.cleanUp(hub) 
+          } else {
+            debug('Got msg:', msg)
           }
         })
       } catch (e) {
@@ -89,14 +100,12 @@ class DIDclient {
       }
     }
 
-    async acceptedLogin (claim) {
-      // TODO verify claim
-      console.log('Login accepted', claim)
-      this.claim = claim
-    }
-
-    async rejectedLogin () {
-      console.log('Login rejected')
+    // Clean up the current request state and close the hub connection
+    cleanUp (hub) {
+      this.loginChannel = null
+      this.loginLink = null
+      this.nonce = null
+      hub.close()
     }
 }
 
@@ -120,14 +129,19 @@ class DIDwallet {
     }
   }
 
-  async respondToLogin (rawKey, channel, claim, status) {
+  async respondToLogin (channel, rawKey, nonce, claim, status) {
     // init Websocket hub connection
     const hub = initHub(channel, this.config.hubUrls)
     // encrypt payload
     const key = await crypto.importKey(Buffer.from(rawKey, 'base64'))
-    const encryptedMsg = await crypto.encrypt(key, {status, claim}, 'base64')
+    const encryptedMsg = await crypto.encrypt(key, {status, claim, nonce}, 'base64')
 
     hub.broadcast(channel, JSON.stringify(encryptedMsg))
+    this.cleanUp(hub)
+  }
+
+  // Clean up the current request state and close the hub connection
+  cleanUp (hub) {
     hub.close()
   }
 }
