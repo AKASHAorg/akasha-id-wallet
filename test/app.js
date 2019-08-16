@@ -2,13 +2,12 @@ const loginBtn = document.getElementById('login')
 const acceptBtn = document.getElementById('accept')
 const rejectBtn = document.getElementById('reject')
 
-const testClaim = {
-  '@context': ['https://www.w3.org/2018/credentials/v1', 'https://schema.org/'],
-  type: ['VerifiableCredential', 'IdentityCredential'],
-  issuer: 'did:akasha:b0a3ca3d0126c4f4a951a46246de0712b7637b8f',
-  issuanceDate: new Date().toISOString(),
-  credentialSubject: {
-    id: 'did:akasha:b0a3ca3d0126c4f4a951a46246de0712b7637b8f',
+const client = new AKASHAid.DIDclient('a', 'b', 'c', 'd', { debug: true })
+const wallet = new AKASHAid.DIDwallet({ debug: true })
+
+const attributes = (did) => {
+  return {
+    id: did,
     name: 'J. Doe',
     address: {
       streetAddress: '10 Rue de Chose',
@@ -17,39 +16,52 @@ const testClaim = {
       addressCountry: 'FR'
     },
     birthDate: '1982-03-15'
-  },
-  proof: {}
+  }
 }
 
 loginBtn.addEventListener('click', async () => {
-  const client = new AKASHAid.DIDclient('a', 'b', 'c', 'd', { debug: true })
   const link = await client.genLoginLink()
   document.getElementById('link').innerText = link
   document.getElementById('request').value = link
   try {
-    await client.bootstrapNewLogin((response) => { // success
-      console.log(response)
-      document.getElementById('claim').innerText = JSON.stringify(response, null, 2)
-    },
-    (response) => { // fail
-      console.log(response)
-      document.getElementById('claim').innerText = JSON.stringify(response, null, 2)
-    })
+    const response = await client.bootstrapNewLogin()
+    document.getElementById('claim').innerText = JSON.stringify(response, null, 2)
+
+    const refreshBtn = document.createElement('button')
+    refreshBtn.innerText = 'Refresh profile'
+    refreshBtn.addEventListener('click', async () => {
+      try {
+        const res = await client.refreshProfile(response.queryChannel, response.token, response.refreshEncKey)
+        console.log('Refresh profile:', res)
+        document.getElementById('claim').innerText = JSON.stringify(res, null, 2)
+      } catch (e) {
+        console.log(e)
+      }
+    }, false)
+    document.getElementsByTagName('body')[0].appendChild(refreshBtn)
   } catch (e) {
     console.log(e)
   }
 }, false)
 
 acceptBtn.addEventListener('click', async () => {
-  const wallet = new AKASHAid.DIDwallet()
+  wallet.init()
   const str = document.getElementById('request').value.substring(29)
-  const req = wallet.parseLoginLink(str)
-  await wallet.handleLogin(req[1], req[2], req[3], testClaim, 'allowed')
+  try {
+    const req = wallet.parseLoginLink(str)
+    await wallet.sendClaim(req[1], req[2], req[3], attributes(wallet.did()), 'allowed')
+  } catch (e) {
+    console.log(e)
+  }
 }, false)
 
 rejectBtn.addEventListener('click', async () => {
-  const wallet = new AKASHAid.DIDwallet()
+  wallet.init()
   const str = document.getElementById('request').value.substring(29)
-  const req = wallet.parseLoginLink(str)
-  await wallet.handleLogin(req[1], req[2], req[3], null, 'denied')
+  try {
+    const req = wallet.parseLoginLink(str)
+    await wallet.sendClaim(req[1], req[2], req[3], null, 'denied')
+  } catch (e) {
+    console.log(e)
+  }
 }, false)
