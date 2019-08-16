@@ -13,6 +13,7 @@
     },
     "devDependencies": {
         "babel": "^6.23.0",
+        "standard": "^13.1.0",
         "webpack": "^4.39.2",
         "webpack-cli": "^3.3.6"
     },
