@@ -2,7 +2,6 @@ const loginBtn = document.getElementById('login')
 const acceptBtn = document.getElementById('accept')
 const rejectBtn = document.getElementById('reject')
 
-let client, wallet
 const testClaim = {
     "@context": ["https://www.w3.org/2018/credentials/v1", "https://schema.org/"],
     "type": ["VerifiableCredential", "IdentityCredential"],
@@ -23,9 +22,10 @@ const testClaim = {
 }
 
 loginBtn.addEventListener('click', async () => {
-    client = new AKASHAid.DIDclient('a','b','c','d')
+    const client = new AKASHAid.DIDclient('a','b','c','d', {debug: true})
     const link = await client.genLoginLink()
     document.getElementById('link').innerText = link
+    document.getElementById('request').value = link
     try {
         await client.bootstrapNewLogin((response) => { // success
             console.log(response)
@@ -42,12 +42,14 @@ loginBtn.addEventListener('click', async () => {
 
 acceptBtn.addEventListener('click', async () => {
     wallet = new AKASHAid.DIDwallet()
-    const req = wallet.parseLoginLink(document.getElementById('request').value)  
-    await wallet.respondToLogin(req[2], req[1], testClaim, 'allowed')
+    const str = document.getElementById('request').value.substring(29)
+    const req = wallet.parseLoginLink(str)
+    await wallet.respondToLogin(req[1], req[2], req[3], testClaim, 'allowed')
 }, false)
 
 rejectBtn.addEventListener('click', async () => {
-    wallet = new AKASHAid.DIDwallet()
-    const req = wallet.parseLoginLink(document.getElementById('request').value)
-    await wallet.respondToLogin(req[2], req[1], null, 'denied')
+    const wallet = new AKASHAid.DIDwallet()
+    const str = document.getElementById('request').value.substring(29)
+    const req = wallet.parseLoginLink(str)
+    await wallet.respondToLogin(req[1], req[2], req[3], null, 'denied')
 }, false)
