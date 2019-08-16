@@ -1,12 +1,16 @@
 const signalhub = require('signalhub') // might switch to SocketCluster later
 const generateId = require('./utils').generateId
-const crypto = require('masq-common').crypto
+const crypto = require('./crypto')
 
 const HUB_URLS = ['localhost:8080']
 const WALLET_URL = 'http://localhost:3000'
 
 let DEBUGGING = false
 
+const STATUS_ALLOWED = 'allowed'
+// const STATUS_DENIED = 'denied'
+
+// enable/disable debug
 function debug () {
   if (DEBUGGING) {
     console.log.apply(this, arguments)
@@ -54,7 +58,6 @@ class DIDclient {
     loginUrl.hash = '/link/' + Buffer.from(hashParams).toString('base64')
 
     this.loginLink = loginUrl.href
-    debug('Generated link from:', hashParams)
     return this.loginLink
   }
 
@@ -69,33 +72,68 @@ class DIDclient {
     *  @param {function} success Function to call when the process succeeds
     *  @param {function} fail Function to call when the process fails
     */
-  async bootstrapNewLogin (success, fail) {
+  async bootstrapNewLogin () {
     if (!this.loginLink) {
       await this.genLoginLink()
     }
-
-    try {
-      const hub = initHub(this.loginChannel, this.config.hubUrls)
-      hub.subscribe(this.loginChannel).on('data', async (data) => {
-        const msg = await crypto.decrypt(this.bootstrapKey, JSON.parse(data), 'base64')
-        if (msg.nonce && msg.nonce === this.nonce) {
-          switch (msg.status) {
-            case 'allowed':
-              success(msg)
-              break
-            case 'denied':
-              fail(msg)
-              break
-            default:
-              throw new Error(`Unexpectedly received message with status ${msg.status}`)
+    return new Promise((resolve, reject) => {
+      try {
+        const hub = initHub(this.loginChannel, this.config.hubUrls)
+        hub.subscribe(this.loginChannel).on('data', async (data) => {
+          const msg = await crypto.decrypt(this.bootstrapKey, JSON.parse(data), 'base64')
+          if (msg.nonce && msg.nonce === this.nonce) {
+            resolve(msg)
+            this.cleanUp(hub)
+          } else {
+            debug('Got msg:', msg)
           }
-          this.cleanUp(hub)
-        } else {
-          debug('Got msg:', msg)
+        })
+      } catch (e) {
+        reject(e)
+      }
+    })
+  }
+
+  // request an updated claim for the user
+  async refreshProfile (channel, token, rawKey) {
+    if (!channel || !token || !rawKey) {
+      debug('refreshProfile:', channel, token, rawKey)
+      throw new Error('You need to provide each of channel ID, app token, and encryption key for the request.')
+    }
+    try {
+      debug('Refreshing profile using:', channel, token, rawKey)
+      // prepare request
+      const key = await crypto.importKey(Buffer.from(rawKey, 'base64'))
+      // encrypt message to be sent
+      const nonce = this.genNonce()
+      const updateChannel = generateId()
+      const encryptedMsg = await crypto.encrypt(key, {
+        nonce: nonce,
+        channel: updateChannel
+      }, 'base64')
+      // set up listener
+      return new Promise((resolve, reject) => {
+        try {
+          const updateHub = initHub(updateChannel, this.config.hubUrls)
+          updateHub.subscribe(updateChannel).on('data', async (data) => {
+            console.log('Raw msg refresh:', data)
+            const msg = await crypto.decrypt(key, JSON.parse(data), 'base64')
+            console.log('Got refresh msg:', msg, this.nonce)
+            if (msg.nonce === nonce) {
+              resolve(msg)
+              this.cleanUp(hub)
+            }
+          })
+          // also broadcast request
+          const hub = initHub(channel, this.config.hubUrls)
+          hub.broadcast(channel, JSON.stringify({ request: 'refresh', token, msg: encryptedMsg }))
+        } catch (e) {
+          reject(e)
         }
       })
     } catch (e) {
-      console.error(e)
+      debug(e)
+      throw new Error(e)
     }
   }
 
@@ -109,12 +147,37 @@ class DIDclient {
 }
 
 class DIDwallet {
-  constructor (hubUrls) {
+  constructor (options = {}) {
     // init config
-    this.config = {
-      hubUrls: hubUrls || HUB_URLS
+    this.config = {}
+    this.config.queryChannel = generateId()
+    this.config.did = `did:akasha:${generateId()}`
+    this.config.hubUrls = options.hubUrls ? options.hubUrls : HUB_URLS
+    // load persistent config if available
+    try {
+      const prev = JSON.parse(window.localStorage.getItem('config'))
+      if (prev) {
+        this.config = prev
+      }
+    } catch (e) {
+      debug(e)
     }
-    this.did = `did:akasha:${generateId()}`
+    if (options.hubUrls) {
+      this.config.hubUrls = options.hubUrls
+    }
+    // save config if changed
+    window.localStorage.setItem('config', JSON.stringify(this.config))
+    // debug
+    DEBUGGING = options.debug ? options.debug : false
+  }
+
+  init () {
+    this.listen()
+  }
+
+  // Return the user's DID
+  did () {
+    return this.config.did
   }
 
   // Parse a base64 encoded login link
@@ -124,19 +187,85 @@ class DIDwallet {
     try {
       return JSON.parse(decoded) // eslint-disable-line
     } catch (e) {
-      console.error(e)
+      console.error(e, decoded)
     }
   }
 
-  async handleLogin (channel, rawKey, nonce, claim, status) {
+  async handleRefresh (data) {
+    try {
+      const localData = JSON.parse(window.localStorage.getItem(data.token))
+      if (!localData) {
+        return
+      }
+      const key = await crypto.importKey(Buffer.from(localData.key, 'base64'))
+      const req = await crypto.decrypt(key, data.msg, 'base64')
+      debug('Got refresh request:', req)
+      await this.sendClaim(req.channel, localData.key, req.nonce, localData.attributes, STATUS_ALLOWED)
+    } catch (e) {
+      debug(e)
+    }
+  }
+
+  async listen () {
+    // init query hub
+    const hub = initHub(this.config.queryChannel, this.config.hubUrls)
+    try {
+      hub.subscribe(this.config.queryChannel).on('data', async (data) => {
+        data = JSON.parse(data)
+        switch (data.request) {
+          case 'refresh':
+            this.handleRefresh(data)
+            break
+          default:
+            break
+        }
+      })
+    } catch (e) {
+      debug(e)
+    }
+  }
+
+  async sendClaim (channel, rawKey, nonce, attributes, status) {
     // init Websocket hub connection
     const hub = initHub(channel, this.config.hubUrls)
-    // encrypt payload
+    // import encryption key
     const key = await crypto.importKey(Buffer.from(rawKey, 'base64'))
-    const encryptedMsg = await crypto.encrypt(key, { status, claim, nonce }, 'base64')
-
-    hub.broadcast(channel, JSON.stringify(encryptedMsg))
+    // generate a unique token for the app
+    const token = generateId()
+    // generate a symmetric encryption key for this app
+    const newKey = await crypto.exportKey(await crypto.genAESKey(true, 'AES-GCM', 128))
+    const refreshEncKey = Buffer.from(newKey).toString('base64')
+    // encrypt reply message
+    const encryptedMsg = await crypto.encrypt(key, {
+      status,
+      claim: this.newClaim(attributes),
+      token,
+      refreshEncKey,
+      queryChannel: this.config.queryChannel,
+      nonce
+    }, 'base64')
+    // broadcast msg back to the app
+    hub.broadcast(channel, JSON.stringify(encryptedMsg), (e) => {
+      debug('Sent claim', e)
+    })
+    // save app settings if we allowed it
+    status === STATUS_ALLOWED && window.localStorage.setItem(token, JSON.stringify({
+      key: refreshEncKey,
+      attributes: attributes
+    }))
+    // cleanup
     this.cleanUp(hub)
+  }
+
+  newClaim (attributes) {
+    return {
+      '@context': ['https://www.w3.org/2018/credentials/v1', 'https://schema.org/'],
+      type: ['VerifiableCredential', 'IdentityCredential'],
+      issuer: this.config.did,
+      issuanceDate: new Date().toISOString(),
+      credentialSubject: attributes,
+      proof: {}
+    }
   }
 
   // Clean up the current request state and close the hub connection
@@ -147,6 +276,5 @@ class DIDwallet {
 
 module.exports = {
   DIDclient,
-  DIDwallet,
-  generateId
+  DIDwallet
 }
