@@ -6,7 +6,7 @@
     "module": "src/index.js",
     "scripts": {
         "build": "webpack -p && cp ./dist/* ./test/",
-        "testhub": "node ./node_modules/signalhub/bin.js -p 8081 listen"
+        "testhub": "node ./node_modules/signalhub/bin.js -p $PORT listen"
     },
     "dependencies": {
         "signalhub": "^4.9.0",
