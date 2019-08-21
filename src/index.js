@@ -80,9 +80,8 @@ class DIDclient {
           const msg = await crypto.decrypt(this.bootstrapKey, JSON.parse(data), 'base64')
           if (msg.nonce && msg.nonce === this.nonce) {
             resolve(msg)
+            debug('Got response:', msg)
             this.cleanUp(hub)
-          } else {
-            debug('Got msg:', msg)
           }
         })
       } catch (e) {
@@ -150,9 +149,10 @@ class DIDwallet {
     this.config.queryChannel = generateId()
     this.config.did = `did:akasha:${generateId()}`
     this.config.hubUrls = options.hubUrls ? options.hubUrls : HUB_URLS
+    this.config.store = options.store || window.localStorage
     // load persistent config if available
     try {
-      const prev = JSON.parse(window.localStorage.getItem('config'))
+      const prev = JSON.parse(this.config.store.getItem('config'))
       if (prev) {
         this.config = prev
       }
@@ -163,7 +163,7 @@ class DIDwallet {
       this.config.hubUrls = options.hubUrls
     }
     // save config if changed
-    window.localStorage.setItem('config', JSON.stringify(this.config))
+    this.config.store.setItem('config', JSON.stringify(this.config))
     // debug
     DEBUGGING = options.debug ? options.debug : false
   }
@@ -182,7 +182,13 @@ class DIDwallet {
     const decoded = Buffer.from(hash, 'base64')
 
     try {
-      return JSON.parse(decoded) // eslint-disable-line
+      const data = JSON.parse(decoded) // eslint-disable-line
+      const parsed = {
+        channel: data[1],
+        rawKey: data[2],
+        nonce: data[3]
+      }
+      return parsed
     } catch (e) {
       console.error(e, decoded)
     }
@@ -190,7 +196,7 @@ class DIDwallet {
 
   async handleRefresh (data) {
     try {
-      const localData = JSON.parse(window.localStorage.getItem(data.token))
+      const localData = JSON.parse(this.config.store.getItem(data.token))
       if (!localData) {
         // TODO: handle revoked apps
         return
@@ -198,7 +204,14 @@ class DIDwallet {
       const key = await crypto.importKey(Buffer.from(localData.key, 'base64'))
       const req = await crypto.decrypt(key, data.msg, 'base64')
       debug('Got refresh request:', req)
-      await this.sendClaim(req.channel, localData.key, req.nonce, localData.attributes, true)
+      await this.sendClaim({
+        channel: req.channel,
+        token: data.token,
+        rawKey: localData.key,
+        nonce: req.nonce
+      },
+      localData.attributes,
+      true)
     } catch (e) {
       debug(e)
     }
@@ -223,13 +236,16 @@ class DIDwallet {
     }
   }
 
-  async sendClaim (channel, rawKey, nonce, attributes, allowed) {
+  async sendClaim (req, attributes, allowed) {
     // init Websocket hub connection
-    const hub = initHub(channel, this.config.hubUrls)
+    const hub = initHub(req.channel, this.config.hubUrls)
+    if (!req || !req.channel || !req.rawKey || !req.nonce) {
+      throw new Error('Missing required paramaters when sending claim. Got:', req)
+    }
     // import encryption key
-    const key = await crypto.importKey(Buffer.from(rawKey, 'base64'))
+    const key = await crypto.importKey(Buffer.from(req.rawKey, 'base64'))
     // generate a unique token for the app
-    const token = generateId()
+    const token = req.token || generateId()
     // generate a symmetric encryption key for this app
     const newKey = await crypto.exportKey(await crypto.genAESKey(true, 'AES-GCM', 128))
     const refreshEncKey = Buffer.from(newKey).toString('base64')
@@ -240,14 +256,14 @@ class DIDwallet {
       token,
       refreshEncKey,
       queryChannel: this.config.queryChannel,
-      nonce
+      nonce: req.nonce
     }, 'base64')
     // broadcast msg back to the app
-    hub.broadcast(channel, JSON.stringify(encryptedMsg), (e) => {
+    hub.broadcast(req.channel, JSON.stringify(encryptedMsg), (e) => {
       debug('Sent claim', encryptedMsg)
     })
     // save app settings if we allowed it
-    allowed && window.localStorage.setItem(token, JSON.stringify({
+    allowed && this.config.store.setItem(token, JSON.stringify({
       key: refreshEncKey,
       attributes: attributes
     }))
