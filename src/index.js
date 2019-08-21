@@ -72,7 +72,7 @@ class DIDclient {
     *  @param {function} success Function to call when the process succeeds
     *  @param {function} fail Function to call when the process fails
     */
-  async bootstrapNewLogin () {
+  async requestLogin () {
     if (!this.loginLink) {
       await this.genLoginLink()
     }
@@ -246,7 +246,7 @@ class DIDwallet {
     }, 'base64')
     // broadcast msg back to the app
     hub.broadcast(channel, JSON.stringify(encryptedMsg), (e) => {
-      debug('Sent claim', e)
+      debug('Sent claim', encryptedMsg)
     })
     // save app settings if we allowed it
     status === STATUS_ALLOWED && window.localStorage.setItem(token, JSON.stringify({
