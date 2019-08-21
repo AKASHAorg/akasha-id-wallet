@@ -2,6 +2,7 @@ const signalhub = require('signalhub') // might switch to SocketCluster later
 const generateId = require('./utils').generateId
 const crypto = require('./crypto')
 
+const APP_NAME = 'AKASHA'
 const HUB_URLS = ['localhost:8080']
 const WALLET_URL = 'http://localhost:3000'
 
@@ -15,8 +16,8 @@ function debug () {
 }
 
 // Initialize the signalhub connection
-const initHub = (channel, hubUrls) => {
-  const hub = signalhub(channel, hubUrls)
+const initHub = (hubUrls) => {
+  const hub = signalhub(APP_NAME, hubUrls)
   // catch errors
   hub.on('error', ({ url, error }) => {
     throw (new Error('Websocket connection error', url, error))
@@ -75,7 +76,7 @@ class DIDclient {
     }
     return new Promise((resolve, reject) => {
       try {
-        const hub = initHub(this.loginChannel, this.config.hubUrls)
+        const hub = initHub(this.config.hubUrls)
         hub.subscribe(this.loginChannel).on('data', async (data) => {
           const msg = await crypto.decrypt(this.bootstrapKey, JSON.parse(data), 'base64')
           if (msg.nonce && msg.nonce === this.nonce) {
@@ -110,7 +111,7 @@ class DIDclient {
       // set up listener
       return new Promise((resolve, reject) => {
         try {
-          const updateHub = initHub(updateChannel, this.config.hubUrls)
+          const updateHub = initHub(this.config.hubUrls)
           updateHub.subscribe(updateChannel).on('data', async (data) => {
             console.log('Raw msg refresh:', data)
             const msg = await crypto.decrypt(key, JSON.parse(data), 'base64')
@@ -121,7 +122,7 @@ class DIDclient {
             }
           })
           // also broadcast request
-          const hub = initHub(channel, this.config.hubUrls)
+          const hub = initHub(this.config.hubUrls)
           hub.broadcast(channel, JSON.stringify({ request: 'refresh', token, msg: encryptedMsg }))
         } catch (e) {
           reject(e)
@@ -162,6 +163,9 @@ class DIDwallet {
     if (options.hubUrls) {
       this.config.hubUrls = options.hubUrls
     }
+    // override the store
+    this.config.store = options.store || window.localStorage
+
     // save config if changed
     this.config.store.setItem('config', JSON.stringify(this.config))
     // debug
@@ -219,7 +223,7 @@ class DIDwallet {
 
   async listen () {
     // init query hub
-    const hub = initHub(this.config.queryChannel, this.config.hubUrls)
+    const hub = initHub(this.config.hubUrls)
     try {
       hub.subscribe(this.config.queryChannel).on('data', async (data) => {
         data = JSON.parse(data)
@@ -238,7 +242,7 @@ class DIDwallet {
 
   async sendClaim (req, attributes, allowed) {
     // init Websocket hub connection
-    const hub = initHub(req.channel, this.config.hubUrls)
+    const hub = initHub(this.config.hubUrls)
     if (!req || !req.channel || !req.rawKey || !req.nonce) {
       throw new Error('Missing required paramaters when sending claim. Got:', req)
     }
