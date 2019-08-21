@@ -50,8 +50,8 @@ acceptBtn.addEventListener('click', async () => {
   wallet.init()
   const str = document.getElementById('request').value.substring(29)
   try {
-    const req = wallet.parseLoginLink(str)
-    await wallet.sendClaim(req[1], req[2], req[3], attributes(wallet.did()), true)
+    const parsed = wallet.parseLoginLink(str)
+    await wallet.sendClaim(parsed, attributes(wallet.did()), true)
   } catch (e) {
     console.log(e)
   }
@@ -61,8 +61,8 @@ rejectBtn.addEventListener('click', async () => {
   wallet.init()
   const str = document.getElementById('request').value.substring(29)
   try {
-    const req = wallet.parseLoginLink(str)
-    await wallet.sendClaim(req[1], req[2], req[3], null, false)
+    const parsed = wallet.parseLoginLink(str)
+    await wallet.sendClaim(parsed, null, false)
   } catch (e) {
     console.log(e)
   }
