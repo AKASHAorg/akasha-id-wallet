@@ -7,9 +7,6 @@ const WALLET_URL = 'http://localhost:3000'
 
 let DEBUGGING = false
 
-const STATUS_ALLOWED = 'allowed'
-// const STATUS_DENIED = 'denied'
-
 // enable/disable debug
 function debug () {
   if (DEBUGGING) {
@@ -195,12 +192,13 @@ class DIDwallet {
     try {
       const localData = JSON.parse(window.localStorage.getItem(data.token))
       if (!localData) {
+        // TODO: handle revoked apps
         return
       }
       const key = await crypto.importKey(Buffer.from(localData.key, 'base64'))
       const req = await crypto.decrypt(key, data.msg, 'base64')
       debug('Got refresh request:', req)
-      await this.sendClaim(req.channel, localData.key, req.nonce, localData.attributes, STATUS_ALLOWED)
+      await this.sendClaim(req.channel, localData.key, req.nonce, localData.attributes, true)
     } catch (e) {
       debug(e)
     }
@@ -225,7 +223,7 @@ class DIDwallet {
     }
   }
 
-  async sendClaim (channel, rawKey, nonce, attributes, status) {
+  async sendClaim (channel, rawKey, nonce, attributes, allowed) {
     // init Websocket hub connection
     const hub = initHub(channel, this.config.hubUrls)
     // import encryption key
@@ -237,7 +235,7 @@ class DIDwallet {
     const refreshEncKey = Buffer.from(newKey).toString('base64')
     // encrypt reply message
     const encryptedMsg = await crypto.encrypt(key, {
-      status,
+      allowed,
       claim: this.newClaim(attributes),
       token,
       refreshEncKey,
@@ -249,7 +247,7 @@ class DIDwallet {
       debug('Sent claim', encryptedMsg)
     })
     // save app settings if we allowed it
-    status === STATUS_ALLOWED && window.localStorage.setItem(token, JSON.stringify({
+    allowed && window.localStorage.setItem(token, JSON.stringify({
       key: refreshEncKey,
       attributes: attributes
     }))

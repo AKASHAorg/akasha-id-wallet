@@ -4,7 +4,7 @@ const rejectBtn = document.getElementById('reject')
 
 const client = new AKASHAid.DIDclient('a', 'b', 'c', 'd', { debug: true })
 const wallet = new AKASHAid.DIDwallet({ debug: true })
-
+let appResponse = {}
 const attributes = (did) => {
   return {
     id: did,
@@ -24,16 +24,18 @@ loginBtn.addEventListener('click', async () => {
   document.getElementById('link').innerText = link
   document.getElementById('request').value = link
   try {
-    const response = await client.bootstrapNewLogin()
+    const response = await client.requestLogin()
     document.getElementById('claim').innerText = JSON.stringify(response, null, 2)
 
+    appResponse = response
     const refreshBtn = document.createElement('button')
     refreshBtn.innerText = 'Refresh profile'
     refreshBtn.addEventListener('click', async () => {
       try {
-        const res = await client.refreshProfile(response.queryChannel, response.token, response.refreshEncKey)
+        const res = await client.refreshProfile(appResponse.queryChannel, appResponse.token, appResponse.refreshEncKey)
         console.log('Refresh profile:', res)
         document.getElementById('claim').innerText = JSON.stringify(res, null, 2)
+        appResponse = res
       } catch (e) {
         console.log(e)
       }
@@ -49,7 +51,7 @@ acceptBtn.addEventListener('click', async () => {
   const str = document.getElementById('request').value.substring(29)
   try {
     const req = wallet.parseLoginLink(str)
-    await wallet.sendClaim(req[1], req[2], req[3], attributes(wallet.did()), 'allowed')
+    await wallet.sendClaim(req[1], req[2], req[3], attributes(wallet.did()), true)
   } catch (e) {
     console.log(e)
   }
@@ -60,7 +62,7 @@ rejectBtn.addEventListener('click', async () => {
   const str = document.getElementById('request').value.substring(29)
   try {
     const req = wallet.parseLoginLink(str)
-    await wallet.sendClaim(req[1], req[2], req[3], null, 'denied')
+    await wallet.sendClaim(req[1], req[2], req[3], null, false)
   } catch (e) {
     console.log(e)
   }
