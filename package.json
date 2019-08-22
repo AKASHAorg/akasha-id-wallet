@@ -1,7 +1,7 @@
 {
     "name": "akasha-id-lib",
     "version": "1.0.0",
-    "description": "Common functions for Masq",
+    "description": "Client/server library for AKASHA.id",
     "main": "dist/akasha-id-lib.js",
     "module": "src/index.js",
     "scripts": {
