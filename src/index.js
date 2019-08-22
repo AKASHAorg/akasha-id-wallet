@@ -27,10 +27,12 @@ const initHub = (hubUrls) => {
 
 class DIDclient {
   constructor (appName, appDescription, appImageURL, appURL, options = {}) {
-    this.appName = appName
-    this.appDescription = appDescription
-    this.appImageURL = appImageURL
-    this.appURL = appURL
+    this.appInfo = {
+      name: appName,
+      description: appDescription,
+      icon: appImageURL,
+      url: appURL
+    }
     // init config
     this.config = {
       hubUrls: options.hubUrls ? options.hubUrls : HUB_URLS,
@@ -52,7 +54,7 @@ class DIDclient {
     const b64Key = Buffer.from(extractedKey).toString('base64')
     // use the wallet app URL for the link
     const loginUrl = new URL(this.config.walletUrl)
-    const hashParams = JSON.stringify([this.appName, this.loginChannel, b64Key, this.nonce])
+    const hashParams = JSON.stringify([this.loginChannel, b64Key, this.nonce])
     loginUrl.hash = '/link/' + Buffer.from(hashParams).toString('base64')
 
     this.loginLink = loginUrl.href
@@ -78,11 +80,35 @@ class DIDclient {
       try {
         const hub = initHub(this.config.hubUrls)
         hub.subscribe(this.loginChannel).on('data', async (data) => {
-          const msg = await crypto.decrypt(this.bootstrapKey, JSON.parse(data), 'base64')
-          if (msg.nonce && msg.nonce === this.nonce) {
-            resolve(msg)
-            debug('Got response:', msg)
-            this.cleanUp(hub)
+          data = JSON.parse(data)
+          if (data.request === 'info') {
+            const msg = await crypto.decrypt(this.bootstrapKey, data.msg, 'base64')
+            if (msg.nonce && msg.nonce === this.nonce) {
+              debug('Step 2 - sending app info to identity provider for registration')
+              // the AKASHA.id app is requesting app details
+              const encKey = await crypto.importKey(Buffer.from(msg.encKey, 'base64'))
+              // genereate new key
+              // generate a one time symmetric encryption key and reveal it to AKASHA.id
+              this.bootstrapKey = await crypto.genAESKey(true, 'AES-GCM', 128)
+              const exportedKey = await crypto.exportKey(this.bootstrapKey)
+              const b64Key = Buffer.from(exportedKey).toString('base64')
+              const encryptedMsg = await crypto.encrypt(encKey, {
+                nonce: msg.nonce,
+                appInfo: this.appInfo,
+                key: b64Key
+              }, 'base64')
+              hub.broadcast(this.loginChannel, JSON.stringify({ token: msg.token, msg: encryptedMsg }))
+              console.log('End step 2')
+            }
+          } else {
+            const msg = await crypto.decrypt(this.bootstrapKey, data, 'base64')
+            if (msg.nonce && msg.nonce === this.nonce) {
+              console.log('Begin step 4')
+              resolve(msg)
+              debug('Got response:', msg)
+              this.cleanUp(hub)
+              console.log('Step 4')
+            }
           }
         })
       } catch (e) {
@@ -110,8 +136,8 @@ class DIDclient {
       }, 'base64')
       // set up listener
       return new Promise((resolve, reject) => {
+        const updateHub = initHub(this.config.hubUrls)
         try {
-          const updateHub = initHub(this.config.hubUrls)
           updateHub.subscribe(updateChannel).on('data', async (data) => {
             const msg = await crypto.decrypt(key, JSON.parse(data), 'base64')
             if (msg.nonce === nonce) {
@@ -123,6 +149,7 @@ class DIDclient {
           updateHub.broadcast(channel, JSON.stringify({ request: 'refresh', token, msg: encryptedMsg }))
         } catch (e) {
           reject(e)
+          this.cleanUp(updateHub)
         }
       })
     } catch (e) {
@@ -174,15 +201,14 @@ class DIDwallet {
   }
 
   // Parse a base64 encoded login link
-  parseLoginLink (hash) {
+  parseRegisterLink (hash) {
     const decoded = Buffer.from(hash, 'base64')
-
     try {
       const data = JSON.parse(decoded) // eslint-disable-line
       const parsed = {
-        channel: data[1],
-        rawKey: data[2],
-        nonce: data[3]
+        channel: data[0],
+        rawKey: data[1],
+        nonce: data[2]
       }
       return parsed
     } catch (e) {
@@ -232,11 +258,56 @@ class DIDwallet {
     }
   }
 
-  async sendClaim (req, attributes, allowed, cb) {
-    // init Websocket hub connection
+  // set up an initial exchange to receive app information
+  async registerApp (req) {
+    // init hub connection
     const hub = initHub(this.config.hubUrls)
     if (!req || !req.channel || !req.rawKey || !req.nonce) {
-      throw new Error('Missing required paramaters when sending claim. Got:', req)
+      throw new Error('Missing required paramaters when calling registeApp. Got:', req)
+    }
+    // import encryption key
+    const key = await crypto.importKey(Buffer.from(req.rawKey, 'base64'))
+    // generate a unique token for the app
+    const token = generateId()
+    // generate a symmetric encryption key for this app
+    const newKey = await crypto.genAESKey(true, 'AES-GCM', 128)
+    const expKey = await crypto.exportKey(newKey)
+    const encKey = Buffer.from(expKey).toString('base64')
+    // encrypt reply message
+    const encryptedMsg = await crypto.encrypt(key, {
+      token,
+      encKey,
+      nonce: req.nonce
+    }, 'base64')
+    // set up listener
+    return new Promise((resolve, reject) => {
+      try {
+        hub.subscribe(req.channel).on('data', async (data) => {
+          data = JSON.parse(data)
+          if (data.token === token) {
+            console.log('Begin step 3', data)
+            const msg = await crypto.decrypt(newKey, data.msg, 'base64')
+            resolve(msg)
+            await this.addApp(msg.token, msg.appInfo)
+            this.cleanUp(hub)
+            console.log('End step 3')
+          }
+        })
+        // also broadcast request
+        hub.broadcast(req.channel, JSON.stringify({ request: 'info', msg: encryptedMsg }))
+        console.log('Step 1')
+      } catch (e) {
+        reject(e)
+        this.cleanUp(hub)
+      }
+    })
+  }
+
+  async sendClaim (req, attributes, allowed, cb) {
+    // init hub connection
+    const hub = initHub(this.config.hubUrls)
+    if (!req || !req.channel || !req.rawKey || !req.nonce) {
+      throw new Error('Missing required paramaters when calling sendClaim. Got:', req)
     }
     // import encryption key
     const key = await crypto.importKey(Buffer.from(req.rawKey, 'base64'))
@@ -257,10 +328,9 @@ class DIDwallet {
     hub.broadcast(req.channel, JSON.stringify(encryptedMsg), () => {
       debug('Claim sent!')
       // save app settings if we allowed it
-      allowed && this.store.setItem(token, JSON.stringify({
-        key: refreshEncKey,
-        attributes: attributes
-      }))
+      if (allowed) {
+        this.storeClaim(token, refreshEncKey, attributes)
+      }
       // cleanup
       this.cleanUp(hub)
       // callback
@@ -281,10 +351,36 @@ class DIDwallet {
     }
   }
 
+  async storeClaim (token, key, attributes, cb) {
+    this.store.setItem(token, JSON.stringify({
+      key: key,
+      attributes: attributes
+    }))
+    if (cb) {
+      cb()
+    }
+  }
+
+  async addApp (token, appInfo) {
+    if (!this.store.getItem(token)) {
+      try {
+        const apps = JSON.parse(this.store.getItem('apps')) || {}
+        apps[token] = appInfo
+        this.store.setItem('apps', JSON.stringify(apps))
+      } catch (e) {
+        throw new Error(e)
+      }
+    }
+  }
+
   async removeApp (appToken) {
     if (this.store.getItem(appToken)) {
       this.store.removeItem(appToken)
     }
+  }
+
+  async listApps () {
+
   }
 
   // Clean up the current request state and close the hub connection
