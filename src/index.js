@@ -118,12 +118,11 @@ class DIDclient {
             console.log('Got refresh msg:', msg, this.nonce)
             if (msg.nonce === nonce) {
               resolve(msg)
-              this.cleanUp(hub)
+              this.cleanUp(updateHub)
             }
           })
           // also broadcast request
-          const hub = initHub(this.config.hubUrls)
-          hub.broadcast(channel, JSON.stringify({ request: 'refresh', token, msg: encryptedMsg }))
+          updateHub.broadcast(channel, JSON.stringify({ request: 'refresh', token, msg: encryptedMsg }))
         } catch (e) {
           reject(e)
         }
@@ -289,6 +288,7 @@ class DIDwallet {
   // Clean up the current request state and close the hub connection
   cleanUp (hub) {
     hub.close()
+    debug('Closed hub')
   }
 }
 
