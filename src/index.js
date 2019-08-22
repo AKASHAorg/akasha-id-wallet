@@ -20,7 +20,7 @@ const initHub = (hubUrls) => {
   const hub = signalhub(APP_NAME, hubUrls)
   // catch errors
   hub.on('error', ({ url, error }) => {
-    throw (new Error('Websocket connection error', url, error))
+    throw (new Error('Connection error', url, error))
   })
   return hub
 }
@@ -70,7 +70,7 @@ class DIDclient {
     *  @param {function} success Function to call when the process succeeds
     *  @param {function} fail Function to call when the process fails
     */
-  async requestLogin () {
+  async requestProfile () {
     if (!this.loginLink) {
       await this.genLoginLink()
     }
@@ -113,9 +113,7 @@ class DIDclient {
         try {
           const updateHub = initHub(this.config.hubUrls)
           updateHub.subscribe(updateChannel).on('data', async (data) => {
-            console.log('Raw msg refresh:', data)
             const msg = await crypto.decrypt(key, JSON.parse(data), 'base64')
-            console.log('Got refresh msg:', msg, this.nonce)
             if (msg.nonce === nonce) {
               resolve(msg)
               this.cleanUp(updateHub)

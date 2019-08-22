@@ -29,7 +29,7 @@ const link = await client.genLoginLink()
 At the same time, attach an event listener on the link/button that triggers the login request, listening for the response coming from the AKASHA.id app.
 
 ```JavaScript
-const response = await client.requestLogin()
+const response = await client.requestProfile()
 ```
 
 The response object will contain the following attributes. It should be stored locally (client-side) for future use.

@@ -24,7 +24,7 @@ loginBtn.addEventListener('click', async () => {
   document.getElementById('link').innerText = link
   document.getElementById('request').value = link
   try {
-    const response = await client.requestLogin()
+    const response = await client.requestProfile()
     document.getElementById('claim').innerText = JSON.stringify(response, null, 2)
     // response object
     appResponse = response
