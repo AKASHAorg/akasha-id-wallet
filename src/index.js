@@ -146,8 +146,8 @@ class DIDwallet {
   constructor (options = {}) {
     // init config
     this.config = {}
-    this.config.queryChannel = generateId()
-    this.config.did = `did:akasha:${generateId()}`
+    this.config.id = generateId()
+    this.config.did = `did:akasha:${this.config.id}`
     this.config.hubUrls = options.hubUrls ? options.hubUrls : HUB_URLS
     this.config.store = options.store || window.localStorage
     // load persistent config if available
@@ -224,7 +224,7 @@ class DIDwallet {
     // init query hub
     const hub = initHub(this.config.hubUrls)
     try {
-      hub.subscribe(this.config.queryChannel).on('data', async (data) => {
+      hub.subscribe(this.config.id).on('data', async (data) => {
         data = JSON.parse(data)
         switch (data.request) {
           case 'refresh':
@@ -258,7 +258,6 @@ class DIDwallet {
       claim: this.newClaim(attributes),
       token,
       refreshEncKey,
-      queryChannel: this.config.queryChannel,
       nonce: req.nonce
     }, 'base64')
     // broadcast msg back to the app

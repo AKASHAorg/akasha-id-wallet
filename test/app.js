@@ -26,13 +26,16 @@ loginBtn.addEventListener('click', async () => {
   try {
     const response = await client.requestLogin()
     document.getElementById('claim').innerText = JSON.stringify(response, null, 2)
-
+    // response object
     appResponse = response
+    // get the channel ID for refresh from the user's DID in the claim
+    const channel = appResponse['claim']['credentialSubject']['id'].split(':')[2]
+    // create refresh button
     const refreshBtn = document.createElement('button')
     refreshBtn.innerText = 'Refresh profile'
     refreshBtn.addEventListener('click', async () => {
       try {
-        const res = await client.refreshProfile(appResponse.queryChannel, appResponse.token, appResponse.refreshEncKey)
+        const res = await client.refreshProfile(channel, appResponse.token, appResponse.refreshEncKey)
         console.log('Refresh profile:', res)
         document.getElementById('claim').innerText = JSON.stringify(res, null, 2)
         appResponse = res
