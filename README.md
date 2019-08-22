@@ -87,3 +87,9 @@ You can also use `false` and `null/empty` attributes obj to deny a request
 ```JavaScript
 await wallet.sendClaim(parsed, null, false)
 ```
+
+To remove a claim created for a specific app, you can use the app token when calling `removeApp()`.
+
+```JavaScript
+await wallet.removeApp(token)
+```
