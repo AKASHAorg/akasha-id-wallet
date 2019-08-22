@@ -148,25 +148,20 @@ class DIDwallet {
     this.config = {}
     this.config.id = generateId()
     this.config.did = `did:akasha:${this.config.id}`
-    this.config.hubUrls = options.hubUrls ? options.hubUrls : HUB_URLS
-    this.config.store = options.store || window.localStorage
+    this.store = options.store || window.localStorage
     // load persistent config if available
     try {
-      const prev = JSON.parse(this.config.store.getItem('config'))
+      const prev = JSON.parse(this.store.getItem('config'))
       if (prev) {
         this.config = prev
       }
     } catch (e) {
       debug(e)
     }
-    if (options.hubUrls) {
-      this.config.hubUrls = options.hubUrls
-    }
-    // override the store
-    this.config.store = options.store || window.localStorage
+    this.config.hubUrls = options.hubUrls ? options.hubUrls : HUB_URLS
 
     // save config if changed
-    this.config.store.setItem('config', JSON.stringify(this.config))
+    this.store.setItem('config', JSON.stringify(this.config))
     // debug
     DEBUGGING = options.debug ? options.debug : false
   }
@@ -199,7 +194,7 @@ class DIDwallet {
 
   async handleRefresh (data) {
     try {
-      const localData = JSON.parse(this.config.store.getItem(data.token))
+      const localData = JSON.parse(this.store.getItem(data.token))
       if (!localData) {
         // TODO: handle revoked apps
         return
@@ -265,7 +260,7 @@ class DIDwallet {
       debug('Sent claim', encryptedMsg)
     })
     // save app settings if we allowed it
-    allowed && this.config.store.setItem(token, JSON.stringify({
+    allowed && this.store.setItem(token, JSON.stringify({
       key: refreshEncKey,
       attributes: attributes
     }))
