@@ -234,7 +234,7 @@ class DIDwallet {
     }
   }
 
-  async sendClaim (req, attributes, allowed) {
+  async sendClaim (req, attributes, allowed, cb) {
     // init Websocket hub connection
     const hub = initHub(this.config.hubUrls)
     if (!req || !req.channel || !req.rawKey || !req.nonce) {
@@ -256,16 +256,20 @@ class DIDwallet {
       nonce: req.nonce
     }, 'base64')
     // broadcast msg back to the app
-    hub.broadcast(req.channel, JSON.stringify(encryptedMsg), (e) => {
-      debug('Sent claim', encryptedMsg)
+    hub.broadcast(req.channel, JSON.stringify(encryptedMsg), () => {
+      debug('Claim sent!')
+      // save app settings if we allowed it
+      allowed && this.store.setItem(token, JSON.stringify({
+        key: refreshEncKey,
+        attributes: attributes
+      }))
+      // cleanup
+      this.cleanUp(hub)
+      // callback
+      if (cb) {
+        cb()
+      }
     })
-    // save app settings if we allowed it
-    allowed && this.store.setItem(token, JSON.stringify({
-      key: refreshEncKey,
-      attributes: attributes
-    }))
-    // cleanup
-    this.cleanUp(hub)
   }
 
   newClaim (attributes) {
@@ -276,6 +280,12 @@ class DIDwallet {
       issuanceDate: new Date().toISOString(),
       credentialSubject: attributes,
       proof: {}
+    }
+  }
+
+  async removeApp (appToken) {
+    if (this.store.getItem(appToken)) {
+      this.store.removeItem(appToken)
     }
   }
 
