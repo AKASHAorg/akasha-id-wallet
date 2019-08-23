@@ -26,13 +26,11 @@ const initHub = (hubUrls) => {
 }
 
 class DIDclient {
-  constructor (appName, appDescription, appImageURL, appURL, options = {}) {
-    this.appInfo = {
-      name: appName,
-      description: appDescription,
-      icon: appImageURL,
-      url: appURL
+  constructor (appInfo, options = {}) {
+    if (!appInfo) {
+      throw new Error('Missing app details. Got:', appInfo)
     }
+    this.appInfo = appInfo
     // init config
     this.config = {
       hubUrls: options.hubUrls ? options.hubUrls : HUB_URLS,
@@ -43,7 +41,7 @@ class DIDclient {
   }
 
   // Generate a special link to request access to the user's DID
-  async genLoginLink () {
+  async registrationLink () {
     // generate a one time channel ID
     this.loginChannel = generateId()
     // generate NONCE
@@ -74,7 +72,7 @@ class DIDclient {
     */
   async requestProfile () {
     if (!this.loginLink) {
-      await this.genLoginLink()
+      await this.registrationLink()
     }
     return new Promise((resolve, reject) => {
       try {
@@ -201,13 +199,13 @@ class DIDwallet {
   }
 
   // Parse a base64 encoded login link
-  parseRegisterLink (hash) {
-    const decoded = Buffer.from(hash, 'base64')
+  parseRegisterLink (str) {
+    const decoded = Buffer.from(str, 'base64')
     try {
       const data = JSON.parse(decoded) // eslint-disable-line
       const parsed = {
         channel: data[0],
-        rawKey: data[1],
+        key: data[1],
         nonce: data[2]
       }
       return parsed
@@ -229,7 +227,7 @@ class DIDwallet {
       await this.sendClaim({
         channel: req.channel,
         token: data.token,
-        rawKey: localData.key,
+        key: localData.key,
         nonce: req.nonce
       },
       localData.attributes,
@@ -259,14 +257,21 @@ class DIDwallet {
   }
 
   // set up an initial exchange to receive app information
-  async registerApp (req) {
+  async registerApp (data) {
+    // parse the request data from the client
+    let req
+    try {
+      req = this.parseRegisterLink(data)
+    } catch (e) {
+      throw new Error(e)
+    }
     // init hub connection
     const hub = initHub(this.config.hubUrls)
-    if (!req || !req.channel || !req.rawKey || !req.nonce) {
-      throw new Error('Missing required paramaters when calling registeApp. Got:', req)
+    if (!req || !req.channel || !req.key || !req.nonce) {
+      throw new Error('Missing required paramaters when calling registeApp.')
     }
     // import encryption key
-    const key = await crypto.importKey(Buffer.from(req.rawKey, 'base64'))
+    const key = await crypto.importKey(Buffer.from(req.key, 'base64'))
     // generate a unique token for the app
     const token = generateId()
     // generate a symmetric encryption key for this app
@@ -287,8 +292,14 @@ class DIDwallet {
           if (data.request === 'appInfo') {
             const msg = await crypto.decrypt(newKey, data.msg, 'base64')
             if (msg.token === token) {
+              // add channel
+              msg.channel = req.channel
               resolve(msg)
-              await this.addApp(msg.token, msg.appInfo)
+              try {
+                await this.addApp(msg.token, msg.appInfo)
+              } catch (e) {
+                debug(e)
+              }
               this.cleanUp(hub)
             }
           }
@@ -305,24 +316,27 @@ class DIDwallet {
   async sendClaim (req, attributes, allowed, cb) {
     // init hub connection
     const hub = initHub(this.config.hubUrls)
-    if (!req || !req.channel || !req.rawKey || !req.nonce) {
+    if (!req || !req.channel || !req.key || !req.nonce) {
       throw new Error('Missing required paramaters when calling sendClaim. Got:', req)
     }
     // import encryption key
-    const key = await crypto.importKey(Buffer.from(req.rawKey, 'base64'))
+    const key = await crypto.importKey(Buffer.from(req.key, 'base64'))
     // generate a unique token for the app
     const token = req.token || generateId()
     // generate a symmetric encryption key for this app
     const newKey = await crypto.exportKey(await crypto.genAESKey(true, 'AES-GCM', 128))
     const refreshEncKey = Buffer.from(newKey).toString('base64')
     // encrypt reply message
-    const encryptedMsg = await crypto.encrypt(key, {
+    const msg = {
       allowed,
-      claim: this.newClaim(attributes),
-      token,
-      refreshEncKey,
       nonce: req.nonce
-    }, 'base64')
+    }
+    if (allowed) {
+      msg.claim = this.newClaim(attributes)
+      msg.token = token
+      msg.refreshEncKey = refreshEncKey
+    }
+    const encryptedMsg = await crypto.encrypt(key, msg, 'base64')
     // broadcast msg back to the app
     hub.broadcast(req.channel, JSON.stringify({ request: 'claim', msg: encryptedMsg }), () => {
       // save app settings if we allowed it
@@ -361,7 +375,7 @@ class DIDwallet {
 
   async addApp (token, appInfo) {
     if (!token || !appInfo) {
-      throw new Error('Missing parameter when adding app', token, appInfo)
+      throw new Error(`Missing parameter when adding app: ${token}, ${JSON.stringify(appInfo)}`)
     }
     if (!this.store.getItem(token)) {
       try {

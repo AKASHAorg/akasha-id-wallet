@@ -2,8 +2,6 @@ const loginBtn = document.getElementById('login')
 const acceptBtn = document.getElementById('accept')
 const rejectBtn = document.getElementById('reject')
 
-const client = new AKASHAid.DIDclient('a', 'b', 'c', 'd', { debug: true })
-const wallet = new AKASHAid.DIDwallet({ debug: true })
 let appResponse = {}
 const attributes = (did) => {
   return {
@@ -19,8 +17,18 @@ const attributes = (did) => {
   }
 }
 
+const appInfo = {
+  name: 'AKASHA.world',
+  description: 'The super cool AKASHA World app!',
+  icon: 'https://app.akasha.world/icon.png',
+  url: 'https://app.akasha.world'
+}
+
+const client = new AKASHAid.DIDclient(appInfo, { debug: true })
+const wallet = new AKASHAid.DIDwallet({ debug: true })
+
 loginBtn.addEventListener('click', async () => {
-  const link = await client.genLoginLink()
+  const link = await client.registrationLink()
   document.getElementById('link').innerText = link
   document.getElementById('request').value = link
   try {
@@ -52,11 +60,9 @@ acceptBtn.addEventListener('click', async () => {
   wallet.init()
   const str = document.getElementById('request').value.substring(29)
   try {
-    const parsed = wallet.parseRegisterLink(str)
-    const msg = await wallet.registerApp(parsed)
-    parsed.token = msg.token
-    parsed.rawKey = msg.key
-    await wallet.sendClaim(parsed, attributes(wallet.did()), true)
+    const msg = await wallet.registerApp(str)
+    document.getElementById('info').innerText = JSON.stringify(msg.appInfo, null, 2)
+    await wallet.sendClaim(msg, attributes(wallet.did()), true)
   } catch (e) {
     console.log(e)
   }
@@ -66,8 +72,9 @@ rejectBtn.addEventListener('click', async () => {
   wallet.init()
   const str = document.getElementById('request').value.substring(29)
   try {
-    const parsed = wallet.parseRegisterLink(str)
-    await wallet.sendClaim(parsed, null, false)
+    const msg = await wallet.registerApp(str)
+    document.getElementById('info').innerText = JSON.stringify(msg.appInfo, null, 2)
+    await wallet.sendClaim(msg, null, false)
   } catch (e) {
     console.log(e)
   }
