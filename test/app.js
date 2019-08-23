@@ -3,19 +3,6 @@ const acceptBtn = document.getElementById('accept')
 const rejectBtn = document.getElementById('reject')
 
 let appResponse = {}
-const attributes = (did) => {
-  return {
-    id: did,
-    name: 'J. Doe',
-    address: {
-      streetAddress: '10 Rue de Chose',
-      postalCode: '98052',
-      addressLocality: 'Paris',
-      addressCountry: 'FR'
-    },
-    birthDate: '1982-03-15'
-  }
-}
 
 const appInfo = {
   name: 'AKASHA.world',
@@ -62,7 +49,17 @@ acceptBtn.addEventListener('click', async () => {
   try {
     const msg = await wallet.registerApp(str)
     document.getElementById('info').innerText = JSON.stringify(msg.appInfo, null, 2)
-    await wallet.sendClaim(msg, attributes(wallet.did()), true)
+    const attributes = {
+      name: 'J. Doe',
+      address: {
+        streetAddress: '10 Rue de Chose',
+        postalCode: '98052',
+        addressLocality: 'Paris',
+        addressCountry: 'FR'
+      },
+      birthDate: '1982-03-15'
+    }
+    await wallet.sendClaim(msg, attributes, true)
   } catch (e) {
     console.log(e)
   }

@@ -353,6 +353,9 @@ class DIDwallet {
   }
 
   newClaim (attributes) {
+    if (!attributes.id) {
+      attributes.id = this.config.did
+    }
     return {
       '@context': ['https://www.w3.org/2018/credentials/v1', 'https://schema.org/'],
       type: ['VerifiableCredential', 'IdentityCredential'],
