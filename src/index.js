@@ -391,6 +391,7 @@ class DIDwallet {
     }
   }
 
+  // Remove one app
   async removeApp (appToken) {
     if (this.store.getItem(appToken)) {
       // remove claim
@@ -406,8 +407,15 @@ class DIDwallet {
     }
   }
 
+  // List all apps currently allowed
   async listApps () {
-
+    let apps
+    try {
+      apps = JSON.parse(this.store.getItem('apps'))
+    } catch (e) {
+      throw new Error(e)
+    }
+    return apps || {}
   }
 
   // Clean up the current request state and close the hub connection
