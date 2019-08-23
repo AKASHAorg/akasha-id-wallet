@@ -36,7 +36,6 @@ loginBtn.addEventListener('click', async () => {
     refreshBtn.addEventListener('click', async () => {
       try {
         const res = await client.refreshProfile(channel, appResponse.token, appResponse.refreshEncKey)
-        console.log('Refresh profile:', res)
         document.getElementById('claim').innerText = JSON.stringify(res, null, 2)
         appResponse = res
       } catch (e) {
@@ -55,7 +54,6 @@ acceptBtn.addEventListener('click', async () => {
   try {
     const parsed = wallet.parseRegisterLink(str)
     const msg = await wallet.registerApp(parsed)
-    console.log(msg)
     parsed.token = msg.token
     parsed.rawKey = msg.key
     await wallet.sendClaim(parsed, attributes(wallet.did()), true)

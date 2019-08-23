@@ -81,10 +81,9 @@ class DIDclient {
         const hub = initHub(this.config.hubUrls)
         hub.subscribe(this.loginChannel).on('data', async (data) => {
           data = JSON.parse(data)
-          if (data.request === 'info') {
+          if (data.request === 'reqInfo') {
             const msg = await crypto.decrypt(this.bootstrapKey, data.msg, 'base64')
             if (msg.nonce && msg.nonce === this.nonce) {
-              debug('Step 2 - sending app info to identity provider for registration')
               // the AKASHA.id app is requesting app details
               const encKey = await crypto.importKey(Buffer.from(msg.encKey, 'base64'))
               // genereate new key
@@ -93,21 +92,19 @@ class DIDclient {
               const exportedKey = await crypto.exportKey(this.bootstrapKey)
               const b64Key = Buffer.from(exportedKey).toString('base64')
               const encryptedMsg = await crypto.encrypt(encKey, {
+                token: msg.token,
                 nonce: msg.nonce,
                 appInfo: this.appInfo,
                 key: b64Key
               }, 'base64')
-              hub.broadcast(this.loginChannel, JSON.stringify({ token: msg.token, msg: encryptedMsg }))
-              console.log('End step 2')
+              hub.broadcast(this.loginChannel, JSON.stringify({ request: 'appInfo', msg: encryptedMsg }))
             }
-          } else {
-            const msg = await crypto.decrypt(this.bootstrapKey, data, 'base64')
+          } else if (data.request === 'claim') {
+            const msg = await crypto.decrypt(this.bootstrapKey, data.msg, 'base64')
             if (msg.nonce && msg.nonce === this.nonce) {
-              console.log('Begin step 4')
               resolve(msg)
               debug('Got response:', msg)
               this.cleanUp(hub)
-              console.log('Step 4')
             }
           }
         })
@@ -139,10 +136,13 @@ class DIDclient {
         const updateHub = initHub(this.config.hubUrls)
         try {
           updateHub.subscribe(updateChannel).on('data', async (data) => {
-            const msg = await crypto.decrypt(key, JSON.parse(data), 'base64')
-            if (msg.nonce === nonce) {
-              resolve(msg)
-              this.cleanUp(updateHub)
+            data = JSON.parse(data)
+            if (data.request === 'claim') {
+              const msg = await crypto.decrypt(key, data.msg, 'base64')
+              if (msg.nonce === nonce) {
+                resolve(msg)
+                this.cleanUp(updateHub)
+              }
             }
           })
           // also broadcast request
@@ -284,18 +284,17 @@ class DIDwallet {
       try {
         hub.subscribe(req.channel).on('data', async (data) => {
           data = JSON.parse(data)
-          if (data.token === token) {
-            console.log('Begin step 3', data)
+          if (data.request === 'appInfo') {
             const msg = await crypto.decrypt(newKey, data.msg, 'base64')
-            resolve(msg)
-            await this.addApp(msg.token, msg.appInfo)
-            this.cleanUp(hub)
-            console.log('End step 3')
+            if (msg.token === token) {
+              resolve(msg)
+              await this.addApp(msg.token, msg.appInfo)
+              this.cleanUp(hub)
+            }
           }
         })
         // also broadcast request
-        hub.broadcast(req.channel, JSON.stringify({ request: 'info', msg: encryptedMsg }))
-        console.log('Step 1')
+        hub.broadcast(req.channel, JSON.stringify({ request: 'reqInfo', msg: encryptedMsg }))
       } catch (e) {
         reject(e)
         this.cleanUp(hub)
@@ -325,8 +324,7 @@ class DIDwallet {
       nonce: req.nonce
     }, 'base64')
     // broadcast msg back to the app
-    hub.broadcast(req.channel, JSON.stringify(encryptedMsg), () => {
-      debug('Claim sent!')
+    hub.broadcast(req.channel, JSON.stringify({ request: 'claim', msg: encryptedMsg }), () => {
       // save app settings if we allowed it
       if (allowed) {
         this.storeClaim(token, refreshEncKey, attributes)
@@ -362,6 +360,9 @@ class DIDwallet {
   }
 
   async addApp (token, appInfo) {
+    if (!token || !appInfo) {
+      throw new Error('Missing parameter when adding app', token, appInfo)
+    }
     if (!this.store.getItem(token)) {
       try {
         const apps = JSON.parse(this.store.getItem('apps')) || {}
@@ -375,7 +376,16 @@ class DIDwallet {
 
   async removeApp (appToken) {
     if (this.store.getItem(appToken)) {
+      // remove claim
       this.store.removeItem(appToken)
+      // also remove app from list
+      try {
+        const apps = JSON.parse(this.store.getItem('apps'))
+        delete apps[appToken]
+        this.store.setItem('apps', JSON.stringify(apps))
+      } catch (e) {
+        throw new Error(e)
+      }
     }
   }
 
