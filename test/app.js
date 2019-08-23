@@ -1,6 +1,9 @@
 const loginBtn = document.getElementById('login')
+const refreshBtn = document.getElementById('refresh')
+const startBtn = document.getElementById('start')
 const acceptBtn = document.getElementById('accept')
 const rejectBtn = document.getElementById('reject')
+const appList = document.getElementById('list')
 
 let appResponse = {}
 
@@ -14,6 +17,23 @@ const appInfo = {
 const client = new AKASHAid.DIDclient(appInfo, { debug: true })
 const wallet = new AKASHAid.DIDwallet({ debug: true })
 
+const listApps = async (wallet) => {
+  const apps = await wallet.listApps()
+  appList.innerHTML = ''
+  Object.keys(apps).forEach((app) => {
+    const item = document.createElement('li')
+    item.innerText = JSON.stringify(apps[app], null, 2)
+    const removeBtn = document.createElement('button')
+    removeBtn.innerText = 'Remove app'
+    removeBtn.addEventListener('click', async () => {
+      wallet.removeApp(app)
+      listApps(wallet)
+    })
+    item.appendChild(removeBtn)
+    appList.appendChild(item)
+  })
+}
+
 loginBtn.addEventListener('click', async () => {
   const link = await client.registrationLink()
   document.getElementById('link').innerText = link
@@ -25,9 +45,7 @@ loginBtn.addEventListener('click', async () => {
     appResponse = response
     // get the channel ID for refresh from the user's DID in the claim
     const channel = appResponse['claim']['credentialSubject']['id'].split(':')[2]
-    // create refresh button
-    const refreshBtn = document.createElement('button')
-    refreshBtn.innerText = 'Refresh profile'
+    // add listener for refresh button
     refreshBtn.addEventListener('click', async () => {
       try {
         const res = await client.refreshProfile(channel, appResponse.token, appResponse.refreshEncKey)
@@ -37,13 +55,12 @@ loginBtn.addEventListener('click', async () => {
         console.log(e)
       }
     }, false)
-    document.getElementsByTagName('body')[0].appendChild(refreshBtn)
   } catch (e) {
     console.log(e)
   }
 }, false)
 
-acceptBtn.addEventListener('click', async () => {
+startBtn.addEventListener('click', async () => {
   wallet.init()
   const str = document.getElementById('request').value.substring(29)
   try {
@@ -59,7 +76,11 @@ acceptBtn.addEventListener('click', async () => {
       },
       birthDate: '1982-03-15'
     }
-    await wallet.sendClaim(msg, attributes, true)
+    // add listener to accept button
+    acceptBtn.addEventListener('click', async () => {
+      await wallet.sendClaim(msg, attributes, true)
+      listApps(wallet)
+    })
   } catch (e) {
     console.log(e)
   }

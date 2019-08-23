@@ -4,15 +4,36 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <style>
+      .row {
+        display: flex;
+      }
+
+      .column {
+        padding: 1rem;
+        flex: 50%;
+        max-width: 50%;
+        overflow-wrap: break-word;
+      }
+    </style>
   </head>
   <body>
-    <p><div id="link"></div></p>
-    <p><button id="login">Request access</button></p>
-    <p><input type="text" id="request"><button id="accept">Accept</button> <button id="reject">Reject</button></p>
-
-    <p>App info: <pre id="info"></pre></p>
-    <p>Claim: <pre id="claim"></pre></p>
-
+    <div class="row">
+      <div class="column" id="client">
+        <h2>akasha.world</h2>
+        <p><div id="link"></div></p>
+        <p><button id="login">Request access</button> | <button id="refresh">Refresh profile</button></p>
+        <p>Claim: <pre id="claim"></pre></p>
+      </div>
+      <div class="column" id="wallet">
+        <h2>akasha.id</h2>
+        <p><input type="text" id="request"><button id="start">Start flow</button></p>
+        <p>App info: <pre id="info"></pre></p>
+        <p><button id="accept">Accept</button> | <button id="reject">Reject</button></p>
+        <p>List of apps:</p>
+        <p><ol id="list"></ol></p>
+      </div>
+    </div> 
     <script type="text/javascript" src="akasha-id-lib.js"></script>
     <script type="text/javascript" src="app.js"></script>
   </body>
