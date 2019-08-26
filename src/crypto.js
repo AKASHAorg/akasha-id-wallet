@@ -21,7 +21,8 @@ const genAESKey = (extractable, mode, keySize) => {
     * @returns {Promise<arrayBuffer>} - The cryptoKey
     */
 const importKey = (key, type = 'raw', mode = 'AES-GCM') => {
-  return window.crypto.subtle.importKey(type, key, { name: mode }
+  const parsedKey = Buffer.from(key, 'base64')
+  return window.crypto.subtle.importKey(type, parsedKey, { name: mode }
     , true, ['encrypt', 'decrypt'])
 }
 
