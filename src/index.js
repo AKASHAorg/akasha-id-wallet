@@ -26,6 +26,13 @@ const initHub = (hubUrls) => {
 }
 
 class DIDclient {
+  /**
+    * Class constructor
+    *
+    * @param {Object} appInfo - An object containing app info to be used in the
+    * registration process
+    * @param {Object} options - Configuration options
+    */
   constructor (appInfo, options = {}) {
     if (!appInfo) {
       throw new Error('Missing app details. Got:', appInfo)
@@ -40,7 +47,11 @@ class DIDclient {
     DEBUGGING = options.debug ? options.debug : false
   }
 
-  // Generate a special link to request access to the user's DID
+  /**
+    * Generate a special link to request access to the user's DID
+    *
+    * @returns {string} - A formatted link containing the necessary info to register the app
+    */
   async registrationLink () {
     // generate a one time channel ID
     this.loginChannel = generateId()
@@ -66,9 +77,12 @@ class DIDclient {
     return Math.floor(Math.random() * (max - min + 1)) + min
   }
 
-  /*  Bootstrap the login process.
-    *  @param {function} success Function to call when the process succeeds
-    *  @param {function} fail Function to call when the process fails
+  /**
+    * Bootstrap the login process by creating a listener that also handles
+    * message exchanges for app registration
+    *
+    * @returns {Promise<Object>} - The response from the IDP, may contain a claim if
+    * the app was allowed (i.e. if msg.allowed is true)
     */
   async requestProfile () {
     if (!this.loginLink) {
@@ -83,7 +97,7 @@ class DIDclient {
             const msg = await crypto.decrypt(this.bootstrapKey, data.msg, 'base64')
             if (msg.nonce && msg.nonce === this.nonce) {
               // the AKASHA.id app is requesting app details
-              const encKey = await crypto.importKey(Buffer.from(msg.encKey, 'base64'))
+              const encKey = await crypto.importKey(msg.encKey)
               // genereate new key
               // generate a one time symmetric encryption key and reveal it to AKASHA.id
               this.bootstrapKey = await crypto.genAESKey(true, 'AES-GCM', 128)
@@ -112,7 +126,14 @@ class DIDclient {
     })
   }
 
-  // request an updated claim for the user
+  /**
+    * Request an updated claim for the user
+    *
+    * @param {string} channel - The channel to be used for requests
+    * @param {string} token - The application token to send
+    * @param {string} rawKey - The encryption key to use for the request message
+    * @returns {Promise<Object>} - The refreshed profile claim
+    */
   async refreshProfile (channel, token, rawKey) {
     if (!channel || !token || !rawKey) {
       debug('refreshProfile:', channel, token, rawKey)
@@ -121,7 +142,7 @@ class DIDclient {
     try {
       debug('Refreshing profile using:', channel, token, rawKey)
       // prepare request
-      const key = await crypto.importKey(Buffer.from(rawKey, 'base64'))
+      const key = await crypto.importKey(rawKey)
       // encrypt message to be sent
       const nonce = this.genNonce()
       const updateChannel = generateId()
@@ -156,7 +177,11 @@ class DIDclient {
     }
   }
 
-  // Clean up the current request state and close the hub connection
+  /**
+    * Clean up the current request state and close the hub connection
+    *
+    * @param {Object} hub - The hub object
+    */
   cleanUp (hub) {
     this.loginChannel = null
     this.loginLink = null
@@ -166,39 +191,44 @@ class DIDclient {
 }
 
 class DIDwallet {
-  constructor (options = {}) {
+  /**
+    * Class constructor
+    *
+    * @param {string} id - A unique indetifier for the current user
+    * @param {Object} options - Configuration options
+    */
+  constructor (id, options = {}) {
     // init config
-    this.config = {}
-    this.config.id = generateId()
-    this.config.did = `did:akasha:${this.config.id}`
-    this.store = options.store || window.localStorage
-    // load persistent config if available
-    try {
-      const prev = JSON.parse(this.store.getItem('config'))
-      if (prev) {
-        this.config = prev
-      }
-    } catch (e) {
-      debug(e)
-    }
-    this.config.hubUrls = options.hubUrls ? options.hubUrls : HUB_URLS
+    this.id = id || generateId()
+    this.did = `did:akasha:${this.id}`
+    this.hubUrls = options.hubUrls ? options.hubUrls : HUB_URLS
 
-    // save config if changed
-    this.store.setItem('config', JSON.stringify(this.config))
     // debug
     DEBUGGING = options.debug ? options.debug : false
   }
 
-  init () {
-    this.listen()
+  /**
+    * Initiate the listener
+    *
+    * @param {Function} refreshHandler - The handler function to trigger in case of a
+    * refresh request
+    */
+  init (refreshHandler) {
+    this.listen(refreshHandler)
   }
 
-  // Return the user's DID
+  // Return the current DID
   did () {
-    return this.config.did
+    return this.did
   }
 
-  // Parse a base64 encoded login link
+  /**
+    * Parse a base64 encoded login link
+    *
+    * @param {string} str - A base64-encoded registration string, contaning channelId,
+    * encryption key, nonce
+    * @returns {Object} - The parsed data
+    */
   parseRegisterLink (str) {
     const decoded = Buffer.from(str, 'base64')
     try {
@@ -214,38 +244,21 @@ class DIDwallet {
     }
   }
 
-  async handleRefresh (data) {
-    try {
-      const localData = JSON.parse(this.store.getItem(data.token))
-      if (!localData) {
-        // TODO: handle revoked apps
-        return
-      }
-      const key = await crypto.importKey(Buffer.from(localData.key, 'base64'))
-      const req = await crypto.decrypt(key, data.msg, 'base64')
-      debug('Got refresh request:', req)
-      await this.sendClaim({
-        channel: req.channel,
-        token: data.token,
-        key: localData.key,
-        nonce: req.nonce
-      },
-      localData.attributes,
-      true)
-    } catch (e) {
-      debug(e)
-    }
-  }
-
-  async listen () {
+  /**
+    * Listener for 'refresh' requests coming from registered apps
+    *
+    * @param {Function} handler - The handler function to trigger in case of a
+    * refresh request
+    */
+  async listen (refreshHandler) {
     // init query hub
-    const hub = initHub(this.config.hubUrls)
+    const hub = initHub(this.hubUrls)
     try {
-      hub.subscribe(this.config.id).on('data', async (data) => {
+      hub.subscribe(this.id).on('data', async (data) => {
         data = JSON.parse(data)
         switch (data.request) {
           case 'refresh':
-            this.handleRefresh(data)
+            refreshHandler(data)
             break
           default:
             break
@@ -256,7 +269,13 @@ class DIDwallet {
     }
   }
 
-  // set up an initial exchange to receive app information
+  /**
+    * Set up an initial exchange to receive app information
+    *
+    * @param {Object} data - A base64-encoded string containing an encryption key, a nonce
+    * and a channelID to bootstrap the registration process
+    * @returns {Promise<Object>} - The application token and data to be stored by the wallet app
+    */
   async registerApp (data) {
     // parse the request data from the client
     let req
@@ -266,12 +285,12 @@ class DIDwallet {
       throw new Error(e)
     }
     // init hub connection
-    const hub = initHub(this.config.hubUrls)
+    const hub = initHub(this.hubUrls)
     if (!req || !req.channel || !req.key || !req.nonce) {
       throw new Error('Missing required paramaters when calling registeApp.')
     }
     // import encryption key
-    const key = await crypto.importKey(Buffer.from(req.key, 'base64'))
+    const key = await crypto.importKey(req.key)
     // generate a unique token for the app
     const token = generateId()
     // generate a symmetric encryption key for this app
@@ -294,9 +313,8 @@ class DIDwallet {
             if (msg.token === token) {
               // add channel
               msg.channel = req.channel
-              resolve(msg)
               try {
-                await this.addApp(msg.token, msg.appInfo)
+                resolve(msg)
               } catch (e) {
                 debug(e)
               }
@@ -313,14 +331,23 @@ class DIDwallet {
     })
   }
 
-  async sendClaim (req, attributes, allowed, cb) {
+  /**
+    * Send a claim with profile attributes
+    *
+    * @param {Object} req - The request coming from the client app
+    * @param {Object} attributes - An object containing profile attributes
+    * @param {string} [mode] - The mode of the key to import (default 'AES-GCM')
+    * @returns {Promise<Object>} - The data used for the claim once it has been sent,
+    * to be stored by the wallet app
+    */
+  async sendClaim (req, attributes, allowed) {
     // init hub connection
-    const hub = initHub(this.config.hubUrls)
+    const hub = initHub(this.hubUrls)
     if (!req || !req.channel || !req.key || !req.nonce) {
       throw new Error('Missing required paramaters when calling sendClaim. Got:', req)
     }
     // import encryption key
-    const key = await crypto.importKey(Buffer.from(req.key, 'base64'))
+    const key = await crypto.importKey(req.key)
     // generate a unique token for the app
     const token = req.token || generateId()
     // generate a symmetric encryption key for this app
@@ -338,87 +365,42 @@ class DIDwallet {
     }
     const encryptedMsg = await crypto.encrypt(key, msg, 'base64')
     // broadcast msg back to the app
-    hub.broadcast(req.channel, JSON.stringify({ request: 'claim', msg: encryptedMsg }), () => {
-      // save app settings if we allowed it
-      if (allowed) {
-        this.storeClaim(token, refreshEncKey, attributes)
-      }
-      // cleanup
-      this.cleanUp(hub)
-      // callback
-      if (cb) {
-        cb()
-      }
+    return new Promise((resolve) => {
+      hub.broadcast(req.channel, JSON.stringify({ request: 'claim', msg: encryptedMsg }), () => {
+        // resolve promise in order to store app settings if we allowed it
+        if (allowed) {
+          resolve({
+            token,
+            refreshEncKey,
+            attributes
+          })
+        }
+        // cleanup
+        this.cleanUp(hub)
+      })
     })
   }
 
+  // TODO: decide if we continue to use VCs or not
   newClaim (attributes) {
     if (!attributes.id) {
-      attributes.id = this.config.did
+      attributes.id = this.did
     }
     return {
       '@context': ['https://www.w3.org/2018/credentials/v1', 'https://schema.org/'],
       type: ['VerifiableCredential', 'IdentityCredential'],
-      issuer: this.config.did,
+      issuer: this.did,
       issuanceDate: new Date().toISOString(),
       credentialSubject: attributes,
       proof: {}
     }
   }
 
-  async storeClaim (token, key, attributes, cb) {
-    this.store.setItem(token, JSON.stringify({
-      key: key,
-      attributes: attributes
-    }))
-    if (cb) {
-      cb()
-    }
-  }
-
-  async addApp (token, appInfo) {
-    if (!token || !appInfo) {
-      throw new Error(`Missing parameter when adding app: ${token}, ${JSON.stringify(appInfo)}`)
-    }
-    if (!this.store.getItem(token)) {
-      try {
-        const apps = JSON.parse(this.store.getItem('apps')) || {}
-        apps[token] = appInfo
-        this.store.setItem('apps', JSON.stringify(apps))
-      } catch (e) {
-        throw new Error(e)
-      }
-    }
-  }
-
-  // Remove one app
-  async removeApp (appToken) {
-    if (this.store.getItem(appToken)) {
-      // remove claim
-      this.store.removeItem(appToken)
-      // also remove app from list
-      try {
-        const apps = JSON.parse(this.store.getItem('apps'))
-        delete apps[appToken]
-        this.store.setItem('apps', JSON.stringify(apps))
-      } catch (e) {
-        throw new Error(e)
-      }
-    }
-  }
-
-  // List all apps currently allowed
-  async listApps () {
-    let apps
-    try {
-      apps = JSON.parse(this.store.getItem('apps'))
-    } catch (e) {
-      throw new Error(e)
-    }
-    return apps || {}
-  }
-
-  // Clean up the current request state and close the hub connection
+  /**
+    * Clean up the current request state and close the hub connection
+    *
+    * @param {Object} hub - The hub object
+    */
   cleanUp (hub) {
     hub.close()
     debug('Closed hub')
@@ -427,5 +409,7 @@ class DIDwallet {
 
 module.exports = {
   DIDclient,
-  DIDwallet
+  DIDwallet,
+  generateId,
+  crypto
 }
