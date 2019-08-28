@@ -9,6 +9,7 @@
         "testhub": "node ./node_modules/signalhub/bin.js -p $PORT listen"
     },
     "dependencies": {
+        "broadcast-channel": "^2.2.0",
         "signalhub": "^4.9.0"
     },
     "devDependencies": {

@@ -1,4 +1,6 @@
-const signalhub = require('signalhub') // might switch to SocketCluster later
+const Signalhub = require('signalhub') // might switch to SocketCluster later
+const BroadcastChannel = require('broadcast-channel').default
+const LeaderElection = require('broadcast-channel/leader-election')
 const generateId = require('./utils').generateId
 const crypto = require('./crypto')
 
@@ -17,7 +19,7 @@ function debug () {
 
 // Initialize the signalhub connection
 const initHub = (hubUrls) => {
-  const hub = signalhub(APP_NAME, hubUrls)
+  const hub = Signalhub(APP_NAME, hubUrls)
   // catch errors
   hub.on('error', ({ url, error }) => {
     throw (new Error('Connection error', url, error))
@@ -214,7 +216,14 @@ class DIDwallet {
     * refresh request
     */
   init (refreshHandler) {
-    this.listen(refreshHandler)
+    // only listen if we're master
+    // initiate the elector process
+    const electorChannel = new BroadcastChannel(APP_NAME)
+    const elector = LeaderElection.create(electorChannel)
+    elector.awaitLeadership().then(() => {
+      debug('This window is master -> now listening to refresh requests.')
+      this.listen(refreshHandler)
+    })
   }
 
   // Return the current DID
