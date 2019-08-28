@@ -162,6 +162,7 @@ const attributes = { ... }
 const claim = await wallet.sendClaim(request, attributes, true)
 
 // store the new claim
+localStorage.setItem(request.token, JSON.stringify(claim))
 ...
 
 // also store the app in the list of apps we allowed
