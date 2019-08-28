@@ -27,7 +27,7 @@ const initHub = (hubUrls) => {
   return hub
 }
 
-class DIDclient {
+class Client {
   /**
     * Class constructor
     *
@@ -192,7 +192,7 @@ class DIDclient {
   }
 }
 
-class DIDwallet {
+class Wallet {
   /**
     * Class constructor
     *
@@ -416,9 +416,28 @@ class DIDwallet {
   }
 }
 
+class Store {
+  /**
+    * Class constructor
+    *
+    * @param {string} user - The current user
+    * @param {string} passphrase - Passphrase from which we derive the key
+    * @param {Object} options - Optional onfiguration options
+    */
+  constructor (user, passphrase, options = {}) {
+    // init config
+    this.user = user
+    this.passphrase = passphrase
+
+    // debug
+    DEBUGGING = options.debug ? options.debug : false
+  }
+}
+
 module.exports = {
-  DIDclient,
-  DIDwallet,
+  Client,
+  Wallet,
+  Store,
   generateId,
   crypto
 }

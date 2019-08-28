@@ -19,15 +19,15 @@ let id
 try {
   const conf = JSON.parse(window.localStorage.getItem('config'))
   if (conf) {
-    id = conf.id || AKASHAid.generateId()
+    id = conf.id || window.AKASHAid.generateId()
   }
   window.localStorage.setItem('config', JSON.stringify({ id }))
 } catch (e) {
   console.log(e)
 }
 
-const client = new AKASHAid.DIDclient(appInfo, { debug: true })
-const wallet = new AKASHAid.DIDwallet(id, { debug: true })
+const client = new window.AKASHAid.Client(appInfo, { debug: true })
+const wallet = new window.AKASHAid.Wallet(id, { debug: true })
 
 const storeClaim = (claim = {}) => {
   window.localStorage.setItem(claim.token, JSON.stringify({
@@ -43,8 +43,8 @@ const handleRefresh = async (data) => {
       // TODO: handle revoked apps
       return
     }
-    const key = await AKASHAid.crypto.importKey(localData.key)
-    const msg = await AKASHAid.crypto.decrypt(key, data.msg, 'base64')
+    const key = await window.AKASHAid.crypto.importKey(localData.key)
+    const msg = await window.AKASHAid.crypto.decrypt(key, data.msg, 'base64')
     const claim = await wallet.sendClaim({
       channel: msg.channel,
       token: data.token,
