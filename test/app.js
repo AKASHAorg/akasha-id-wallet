@@ -77,7 +77,7 @@ const removeApp = (appToken) => {
 
 const addApp = async (msg) => {
   if (!msg.token || !msg.appInfo) {
-    throw new Error(`Missing parameter when adding app: ${token}, ${JSON.stringify(appInfo)}`)
+    throw new Error(`Missing parameter when adding app: ${msg.token}, ${JSON.stringify(msg.appInfo)}`)
   }
   let apps = {}
   try {
