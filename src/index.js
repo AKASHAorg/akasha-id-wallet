@@ -291,12 +291,32 @@ class Wallet {
     }
   }
 
+  /**
+   * Log an user out of a specific profile
+   */
   logout () {
     this.cleanUp(this.hub)
+    this.hub = undefined
     this.id = undefined
     this.did = undefined
     this.store = undefined
-    this.hub = undefined
+  }
+
+  /**
+   * Remove a local user profile
+   *
+   * @param {string} userId The user's local ID
+   */
+  async removeUser (userId) {
+    try {
+      delete this.profiles[userId]
+      await SecureStore._idb.set('profiles', this.profiles)
+    } catch (e) {
+      throw new Error(e)
+    }
+    await this.store.clear()
+    // TODO: remove the db and store (needs upstream implementation in idbkeyval)
+    this.logout()
   }
 
   /**
@@ -491,6 +511,13 @@ class Wallet {
     }
   }
 
+  /**
+   * Store a given claim for an app
+   *
+   * @param {string} token The token identifying the app
+   * @param {string} key The encryption key used for the next request
+   * @param {Object} attributes The profile attributes shared with the app
+   */
   storeClaim (token, key, attributes) {
     return this.store.set(token, {
       key: key,
@@ -498,6 +525,12 @@ class Wallet {
     })
   }
 
+  /**
+   * Add an app to the local list of allowed apps
+   *
+   * @param {string} token The token specific to this app
+   * @param {Object} appInfo An object describing the app
+   */
   async addApp (token, appInfo) {
     if (!token || !appInfo) {
       throw new Error(`Missing parameter when adding app: ${token}, ${JSON.stringify(appInfo)}`)
@@ -514,7 +547,11 @@ class Wallet {
     }
   }
 
-  // Remove one app
+  /**
+   * Remove one app based on the provided token ID
+   *
+   * @param {string} appToken The token specific to a given app
+   */
   async removeApp (appToken) {
     if (this.store.get(appToken)) {
       // remove claim
