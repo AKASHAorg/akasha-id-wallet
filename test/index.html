@@ -1,42 +1,26 @@
+<!doctype html>
+<html>
+<!-- https://medium.com/dailyjs/running-mocha-tests-as-native-es6-modules-in-a-browser-882373f2ecb0 -->
 
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <style>
-      .row {
-        display: flex;
-      }
+<head>
+  <title>Mocha</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="../node_modules/mocha/mocha.css" rel="stylesheet" />
+  <script src="../node_modules/mocha/mocha.js"></script>
+  <script src="../node_modules/chai/chai.js"></script>
+  <script src="../dist/akasha-id-lib.js"></script>
+</head>
 
-      .column {
-        padding: 1rem;
-        flex: 50%;
-        max-width: 50%;
-        overflow-wrap: break-word;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="row">
-      <div class="column" id="client">
-        <h2>akasha.world</h2>
-        <p><div id="link"></div></p>
-        <p><button id="login">Request access</button> | <button id="refresh">Refresh profile</button></p>
-        <p>Claim: <pre id="claim"></pre></p>
-      </div>
-      <div class="column" id="wallet">
-        <h2>akasha.id</h2>
-        <p><button id="signup">Signup/Login</button></p>
-        <p><input type="text" id="request"><button id="start">Start flow</button></p>
-        <p>App info: <pre id="info"></pre></p>
-        <p><button id="accept">Accept</button> | <button id="reject">Reject</button></p>
-        <p>List of apps:</p>
-        <p><ol id="list"></ol></p>
-      </div>
-    </div> 
-    <script type="text/javascript" src="akasha-id-lib.js"></script>
-    <script type="text/javascript" src="app.js"></script>
-  </body>
+<body>
+  <div id="mocha"></div>
+  <script>
+    mocha.setup('bdd')
+  </script>
+  <script src="./id.test.js"></script>
+  <script>
+    mocha.run();
+  </script>
+</body>
+
 </html>

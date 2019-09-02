@@ -5,8 +5,6 @@ const SecureStore = require('secure-store')
 const WebCrypto = require('web-crypto')
 
 const APP_NAME = 'AKASHA'
-const HUB_URLS = ['localhost:8080']
-const WALLET_URL = 'http://localhost:3000'
 
 let DEBUGGING = false
 
@@ -33,20 +31,21 @@ class Client {
     *
     * @param {Object} appInfo - An object containing app info to be used in the
     * registration process
-    * @param {Object} options - Configuration options
+    * @param {Object} config - Configuration options
     */
-  constructor (appInfo, options = {}) {
+  constructor (appInfo, config = {}) {
     if (!appInfo) {
-      throw new Error('Missing app details. Got:', appInfo)
+      throw new Error('Missing app details')
     }
     this.appInfo = appInfo
+
     // init config
-    this.config = {
-      hubUrls: options.hubUrls ? options.hubUrls : HUB_URLS,
-      walletUrl: options.walletUrl ? options.walletUrl : WALLET_URL
+    if (!config || !config.hubUrls || !config.walletUrl) {
+      throw new Error('Missing config details')
     }
+    this.config = config
     // debug
-    DEBUGGING = options.debug ? options.debug : false
+    DEBUGGING = config.debug ? config.debug : false
   }
 
   /**
@@ -63,12 +62,10 @@ class Client {
     this.bootstrapKey = await WebCrypto.genAESKey(true, 'AES-GCM', 128)
     const extractedKey = await WebCrypto.exportKey(this.bootstrapKey)
     const b64Key = Buffer.from(extractedKey).toString('base64')
-    // use the wallet app URL for the link
-    const loginUrl = new URL(this.config.walletUrl)
-    const hashParams = JSON.stringify([this.loginChannel, b64Key, this.nonce])
-    loginUrl.hash = '/link/' + Buffer.from(hashParams).toString('base64')
 
-    this.loginLink = loginUrl.href
+    // use the wallet app URL for the link
+    const hashParams = JSON.stringify([this.loginChannel, b64Key, this.nonce])
+    this.loginLink = this.config.walletUrl + Buffer.from(hashParams).toString('base64')
     return this.loginLink
   }
 
@@ -197,15 +194,18 @@ class Wallet {
     * Class constructor
     *
     * @param {string} id - A unique indetifier for the current user
-    * @param {Object} options - Configuration options
+    * @param {Object} config - Configuration options
     */
-  constructor (options = {}) {
+  constructor (config = {}) {
     // load persistent config if available
     this.conf = {}
-    this.hubUrls = options.hubUrls || HUB_URLS
-    this.electorChannel = new BroadcastChannel(APP_NAME)
+    if (!config || !config.hubUrls) {
+      throw new Error('Missing config details')
+    }
+    this.hubUrls = config.hubUrls
+    this.isLeader = false
     // debug
-    DEBUGGING = options.debug ? options.debug : false
+    DEBUGGING = config.debug ? config.debug : false
   }
 
   /**
@@ -225,8 +225,9 @@ class Wallet {
   /**
     * Sign up a user
     *
-    * @param {string} userId - The user identifier
+    * @param {string} name - The profile name
     * @param {string} passphrase - The user's passphrase
+    * @returns {string} id - The id specific to the new profile
     */
   async signup (name, passphrase) {
     if (!name || !passphrase) {
@@ -241,6 +242,7 @@ class Wallet {
     })
     // also log user in
     await this.login(this.id, passphrase)
+    return this.id
   }
 
   /**
@@ -258,11 +260,12 @@ class Wallet {
 
       // only listen if we're master
       // initiate the elector process
-
-      this.elector = LeaderElection.create(this.electorChannel)
+      const electorChannel = new BroadcastChannel(APP_NAME)
+      this.elector = LeaderElection.create(electorChannel)
       this.elector.awaitLeadership().then(() => {
         debug('This window is master -> now listening to refresh requests.')
         this.listen()
+        this.isLeader = true
       })
     } catch (e) {
       throw new Error(e.message)
@@ -272,10 +275,11 @@ class Wallet {
   /**
    * Log an user out of a specific profile
    */
-  logout () {
-    this.cleanUp(this.hub)
-    this.elector.die()
+  async logout () {
+    if (this.hub) await this.cleanUp(this.hub)
+    if (this.elector) await this.elector.die()
     this.elector = undefined
+    this.isLeader = false
     this.hub = undefined
     this.id = undefined
     this.did = undefined
@@ -331,6 +335,9 @@ class Wallet {
    * @param {string} The user's profile ID
    */
   async removeProfile (id) {
+    if (!this.did) {
+      throw new Error('Not logged in')
+    }
     try {
       delete this.profiles[id]
       await SecureStore._idb.set('profiles', this.profiles)
@@ -339,7 +346,7 @@ class Wallet {
     }
     await this.store.clear()
     // TODO: remove the db and store (needs upstream implementation in idbkeyval)
-    this.logout()
+    await this.logout()
   }
 
   /**
@@ -385,7 +392,7 @@ class Wallet {
       }
       return parsed
     } catch (e) {
-      console.error(e, decoded)
+      throw new Error(e)
     }
   }
 
@@ -420,6 +427,9 @@ class Wallet {
     * @returns {Promise<Object>} - The application token and data to be stored by the wallet app
     */
   async registerApp (data) {
+    if (!this.did) {
+      throw new Error('Not logged in')
+    }
     // parse the request data from the client
     let req
     try {
@@ -484,7 +494,10 @@ class Wallet {
     * @returns {Promise<Object>} - The data used for the claim once it has been sent,
     * to be stored by the wallet app
     */
-  async sendClaim (req, attributes, allowed, cb) {
+  async sendClaim (req, attributes, allowed) {
+    if (!this.did) {
+      throw new Error('Not logged in')
+    }
     // init hub connection
     const hub = initHub(this.hubUrls)
     if (!req || !req.channel || !req.key || !req.nonce) {
@@ -503,7 +516,8 @@ class Wallet {
       nonce: req.nonce
     }
     if (allowed) {
-      msg.claim = this.newClaim(attributes)
+      // msg.claim = this.prepareClaim(attributes)
+      msg.claim = attributes
       msg.token = token
       msg.refreshEncKey = refreshEncKey
     }
@@ -512,7 +526,7 @@ class Wallet {
     hub.broadcast(req.channel, JSON.stringify({ request: 'claim', msg: encryptedMsg }), async () => {
       // save app settings if we allowed it
       if (allowed) {
-        await this.storeClaim(token, refreshEncKey, attributes)
+        await this.addClaim(token, refreshEncKey, attributes)
       }
       // cleanup
       this.cleanUp(hub)
@@ -520,7 +534,7 @@ class Wallet {
   }
 
   // TODO: decide if we continue to use VCs or not
-  newClaim (attributes) {
+  prepareClaim (attributes) {
     if (!attributes.id) {
       attributes.id = this.did
     }
@@ -543,11 +557,45 @@ class Wallet {
    * @returns {Promise} - The promise that resolves upon successful completion of the
    * data store operation
    */
-  storeClaim (token, key, attributes) {
+  addClaim (token, key, attributes) {
+    if (!this.did) {
+      throw new Error('Not logged in')
+    }
+    if (!token || !key || !attributes) {
+      throw new Error('Missing parameter when adding claim')
+    }
     return this.store.set(token, {
       key: key,
       attributes: attributes
     })
+  }
+
+  /**
+   * Retrieve a given claim for an app based on the app token provided
+   *
+   * @param {string} token The token identifying the app
+   * @returns {Promise} - The promise that resolves upon successful completion of the
+   * data store operation
+   */
+  getClaim (token) {
+    if (!this.did) {
+      throw new Error('Not logged in')
+    }
+    return this.store.get(token)
+  }
+
+  /**
+   * Remove a given claim based on the app token provided
+   *
+   * @param {string} token The token identifying the app
+   * @returns {Promise} - The promise that resolves upon successful completion of the
+   * data store operation
+   */
+  removeClaim (token) {
+    if (!this.did) {
+      throw new Error('Not logged in')
+    }
+    return this.store.del(token)
   }
 
   /**
@@ -559,8 +607,12 @@ class Wallet {
    * data store operation
    */
   async addApp (token, appInfo) {
+    if (!this.did) {
+      throw new Error('Not logged in')
+    }
+    // TODO: validate appInfo schema before storing
     if (!token || !appInfo) {
-      throw new Error(`Missing parameter when adding app: ${token}, ${JSON.stringify(appInfo)}`)
+      throw new Error('Missing parameter when adding app')
     }
     const exists = await this.store.get(token)
     if (!exists) {
@@ -581,14 +633,17 @@ class Wallet {
    * @returns {Promise} - The promise that resolves upon successful completion of the
    * data store operation
    */
-  async removeApp (appToken) {
-    if (this.store.get(appToken)) {
-      // remove claim
-      await this.store.del(appToken)
+  async removeApp (token) {
+    if (!this.did) {
+      throw new Error('Not logged in')
+    }
+    if (this.store.get(token)) {
+      // also remove claim
+      await this.store.del(token)
       // also remove app from list
       try {
         const apps = await this.store.get('apps')
-        delete apps[appToken]
+        delete apps[token]
         return this.store.set('apps', apps)
       } catch (e) {
         throw new Error(e)
@@ -600,6 +655,9 @@ class Wallet {
    * Return the list all apps currently allowed
    */
   async apps () {
+    if (!this.did) {
+      throw new Error('Not logged in')
+    }
     let apps
     try {
       apps = await this.store.get('apps')
@@ -610,7 +668,7 @@ class Wallet {
   }
 
   // Return the current DID
-  did () {
+  currentDID () {
     return this.did
   }
 

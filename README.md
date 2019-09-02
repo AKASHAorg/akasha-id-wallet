@@ -99,8 +99,8 @@ Once the `signup()` call has completed the user will be logged in by default.
 const profileName = 'jane'
 const passphrase = 'some super secure pass'
 
-await wallet.signup(profileName, passphrase)
-// jane is now logged in, you can now list apps
+const id = await wallet.signup(profileName, passphrase)
+// jane is now logged in, you can now list apps or do something with the profile ID
 ```
 
 ### Login
