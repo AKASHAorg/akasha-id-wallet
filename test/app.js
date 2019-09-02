@@ -21,18 +21,22 @@ const wallet = new window.AKASHAid.Wallet({ debug: true })
 const listApps = async (wallet) => {
   const apps = await wallet.apps()
   appList.innerHTML = ''
-  Object.keys(apps).forEach((app) => {
-    const item = document.createElement('li')
-    item.innerText = JSON.stringify(apps[app], null, 2)
-    const removeBtn = document.createElement('button')
-    removeBtn.innerText = 'Remove app'
-    removeBtn.addEventListener('click', async () => {
-      await wallet.removeApp(app)
-      listApps(wallet)
+  console.log('Apps:', apps)
+  const ids = Object.keys(apps)
+  if (ids.length > 0) {
+    ids.forEach((app) => {
+      const item = document.createElement('li')
+      item.innerText = JSON.stringify(apps[app], null, 2)
+      const removeBtn = document.createElement('button')
+      removeBtn.innerText = 'Remove app'
+      removeBtn.addEventListener('click', async () => {
+        await wallet.removeApp(app)
+        listApps(wallet)
+      })
+      item.appendChild(removeBtn)
+      appList.appendChild(item)
     })
-    item.appendChild(removeBtn)
-    appList.appendChild(item)
-  })
+  }
 }
 
 loginBtn.addEventListener('click', async () => {
@@ -67,10 +71,11 @@ loginBtn.addEventListener('click', async () => {
 signupBtn.addEventListener('click', async () => {
   await wallet.init()
   const profiles = wallet.publicProfiles()
-  if (Object.keys(profiles).length > 0) {
-    const user = Object.keys(profiles)[0]
-    await wallet.login(user, 'pass')
-    console.log('Logged in as user >>', profiles[user].user)
+  console.log('Local profiles:', profiles)
+  if (profiles.length > 0) {
+    const profile = profiles[0]
+    await wallet.login(profile.id, 'pass')
+    console.log('Logged in as user >>', profile.name)
   } else {
     await wallet.signup('test', 'pass')
   }

@@ -203,7 +203,7 @@ class Wallet {
     // load persistent config if available
     this.conf = {}
     this.hubUrls = options.hubUrls || HUB_URLS
-
+    this.electorChannel = new BroadcastChannel(APP_NAME)
     // debug
     DEBUGGING = options.debug ? options.debug : false
   }
@@ -223,43 +223,21 @@ class Wallet {
   }
 
   /**
-   * Return the current list of profiles
-   */
-  publicProfiles () {
-    return this.profiles
-  }
-
-  /**
-    * Update the list of profiles for a given userID
-    *
-    * @param {string} userId - The user identifier
-    * @param {Object} data - The user's public (local) profile
-    */
-  async updateProfileList (userId, data) {
-    try {
-      this.profiles[userId] = data
-      await SecureStore._idb.set('profiles', this.profiles)
-    } catch (e) {
-      throw new Error(e)
-    }
-  }
-
-  /**
     * Sign up a user
     *
     * @param {string} userId - The user identifier
     * @param {string} passphrase - The user's passphrase
     */
-  async signup (user, passphrase) {
-    if (!user || !passphrase) {
-      throw new Error('Both username and password are required')
+  async signup (name, passphrase) {
+    if (!name || !passphrase) {
+      throw new Error('Both profile name and password are required')
     }
     // TODO: should use key derivation for future proof of ownership when
     // generating a new ID
     this.id = WebCrypto.genId()
     // add this user to the local list of available accounts
     await this.updateProfileList(this.id, {
-      user
+      name
     })
     // also log user in
     await this.login(this.id, passphrase)
@@ -280,9 +258,9 @@ class Wallet {
 
       // only listen if we're master
       // initiate the elector process
-      const electorChannel = new BroadcastChannel(APP_NAME)
-      const elector = LeaderElection.create(electorChannel)
-      elector.awaitLeadership().then(() => {
+
+      this.elector = LeaderElection.create(this.electorChannel)
+      this.elector.awaitLeadership().then(() => {
         debug('This window is master -> now listening to refresh requests.')
         this.listen()
       })
@@ -296,6 +274,8 @@ class Wallet {
    */
   logout () {
     this.cleanUp(this.hub)
+    this.elector.die()
+    this.elector = undefined
     this.hub = undefined
     this.id = undefined
     this.did = undefined
@@ -303,13 +283,56 @@ class Wallet {
   }
 
   /**
+   * Return the current list of profiles
+   */
+  publicProfiles () {
+    const profiles = []
+    const ids = Object.keys(this.profiles)
+    if (ids.length === 0) {
+      return profiles
+    }
+    ids.forEach(id => {
+      profiles.push({
+        id,
+        name: this.profiles[id].name,
+        picture: this.profiles[id].picture
+      })
+    })
+    return profiles
+  }
+
+  /**
+    * Update the list of profiles for a given userID
+    *
+    * @param {string} userId - The user identifier
+    * @param {Object} data - The user's (public) profile that is used when
+    * building the list
+    * @returns {Promise} - The promise that resolves upon successful completion of the
+    * data store operation
+    */
+  async updateProfileList (userId, data) {
+    if (!data.name) {
+      throw new Error('Missing name from profile')
+    }
+    try {
+      this.profiles[userId] = {
+        name: data.name,
+        picture: data.picture || undefined
+      }
+      await SecureStore._idb.set('profiles', this.profiles)
+    } catch (e) {
+      throw new Error(e)
+    }
+  }
+
+  /**
    * Remove a local user profile
    *
-   * @param {string} userId The user's local ID
+   * @param {string} The user's profile ID
    */
-  async removeUser (userId) {
+  async removeProfile (id) {
     try {
-      delete this.profiles[userId]
+      delete this.profiles[id]
       await SecureStore._idb.set('profiles', this.profiles)
     } catch (e) {
       throw new Error(e)
@@ -517,6 +540,8 @@ class Wallet {
    * @param {string} token The token identifying the app
    * @param {string} key The encryption key used for the next request
    * @param {Object} attributes The profile attributes shared with the app
+   * @returns {Promise} - The promise that resolves upon successful completion of the
+   * data store operation
    */
   storeClaim (token, key, attributes) {
     return this.store.set(token, {
@@ -530,6 +555,8 @@ class Wallet {
    *
    * @param {string} token The token specific to this app
    * @param {Object} appInfo An object describing the app
+   * @returns {Promise} - The promise that resolves upon successful completion of the
+   * data store operation
    */
   async addApp (token, appInfo) {
     if (!token || !appInfo) {
@@ -540,7 +567,7 @@ class Wallet {
       try {
         const apps = await this.store.get('apps') || {}
         apps[token] = appInfo
-        return await this.store.set('apps', apps)
+        return this.store.set('apps', apps)
       } catch (e) {
         throw new Error(e)
       }
@@ -551,6 +578,8 @@ class Wallet {
    * Remove one app based on the provided token ID
    *
    * @param {string} appToken The token specific to a given app
+   * @returns {Promise} - The promise that resolves upon successful completion of the
+   * data store operation
    */
   async removeApp (appToken) {
     if (this.store.get(appToken)) {
@@ -558,7 +587,7 @@ class Wallet {
       await this.store.del(appToken)
       // also remove app from list
       try {
-        const apps = this.store.get('apps')
+        const apps = await this.store.get('apps')
         delete apps[appToken]
         return this.store.set('apps', apps)
       } catch (e) {
@@ -573,11 +602,11 @@ class Wallet {
   async apps () {
     let apps
     try {
-      apps = this.store.get('apps')
+      apps = await this.store.get('apps')
     } catch (e) {
       throw new Error(e)
     }
-    return apps
+    return apps || {}
   }
 
   // Return the current DID
