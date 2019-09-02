@@ -193,11 +193,15 @@ const attributes = { ... }
 
 ...
 
+// don't forget to add the app to the user's list of allowed apps
+await wallet.addApp(request.token, request.appInfo)
+
 // send the claim
-await wallet.sendClaim(request, attributes, true) // 
+await wallet.sendClaim(request, attributes, true) 
 ```
 
-You can also use `false` and `null/empty` attributes obj to deny a request.
+You can also use `false` and `null/empty` attributes obj to deny a request. In this case you will
+not have to save the app to the list though.
 
 ```JavaScript
 await wallet.sendClaim(request, null, false)
