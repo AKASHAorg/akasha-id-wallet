@@ -7,7 +7,7 @@
     "scripts": {
         "build": "webpack -p && cp ./dist/* ./test/",
         "testhub": "node ./node_modules/signalhub/bin.js -p 8888 listen &>/dev/null",
-        "test-only": "concurrently -k -s first \"npm run testhub\" \"mocha-headless-chrome -f ./test/index.html -a no-sandbox -a disable-setuid-sandbox\"",
+        "test-only": "concurrently -k -s first \"npm run testhub\" \"mocha-headless-chrome -f ./test/index.html\"",
         "test": "npm run build && npm run test-only"
     },
     "dependencies": {
