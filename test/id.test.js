@@ -3,6 +3,14 @@
 
 const AKASHAid = window.AKASHAid
 
+const sleep = timeout => {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve()
+    }, timeout)
+  })
+}
+
 describe('AKASHA ID', function () {
   const appInfo = {
     name: 'AKASHA.world',
@@ -71,6 +79,17 @@ describe('AKASHA ID', function () {
         err = error
       }
       chai.assert.isUndefined(err)
+    })
+  })
+
+  context('Client API', () => {
+    it('Should successfully generate registration links', async () => {
+      const link = await Client.registrationLink()
+      const walletStr = link.substring(0, config.walletUrl.length)
+      const reqStr = link.substring(config.walletUrl.length)
+
+      chai.assert.equal(walletStr, config.walletUrl)
+      chai.assert.equal(reqStr.length, 96)
     })
   })
 
@@ -235,7 +254,10 @@ describe('AKASHA ID', function () {
 
       const profiles = Wallet.publicProfiles()
       chai.assert.equal(id, profiles[0].id)
-      console.log(Wallet.hub)
+      // give the hub and the leader election process time to set up
+      await sleep(300)
+      chai.assert.isTrue(Wallet.elector.isLeader)
+      chai.assert.isDefined(Wallet.hub)
     })
 
     it('Should have created an AKASHA DID', () => {
@@ -414,14 +436,95 @@ describe('AKASHA ID', function () {
     })
   })
 
-  context('Client', () => {
-    it('Should successfully generate registrationLink', async () => {
-      const link = await Client.registrationLink()
-      const walletStr = link.substring(0, config.walletUrl.length)
-      const reqStr = link.substring(config.walletUrl.length)
-
-      chai.assert.equal(walletStr, config.walletUrl)
-      chai.assert.equal(reqStr.length, 96)
+  context('Client <-> Wallet e2e', () => {
+    // first we create a valid profile
+    before(async () => {
+      await Wallet.signup(profileName, profilePass)
+      await sleep(300)
     })
+
+    let clientClaim
+
+    it('Should fail to register a new app from a request we denied', async () => {
+      const link = await Client.registrationLink()
+
+      const request = Client.requestProfile()
+      // give the client some time to setup listener
+      await sleep(100)
+
+      const msg = await Wallet.registerApp(link.substring(config.walletUrl.length))
+      await Wallet.sendClaim(msg, {}, false)
+
+      const apps = await Wallet.apps()
+      chai.assert.isEmpty(apps)
+
+      return new Promise(resolve => {
+        request.then(response => {
+          chai.assert.isFalse(response.allowed)
+          chai.assert.isUndefined(response.claim)
+          return resolve()
+        })
+      })
+    })
+
+    it('Should successfully register a new app from a request we allowed', async () => {
+      const link = await Client.registrationLink()
+
+      const request = Client.requestProfile()
+      // give the client some time to setup listener
+      await sleep(100)
+
+      const msg = await Wallet.registerApp(link.substring(config.walletUrl.length))
+      chai.assert.exists(msg.token)
+      chai.assert.exists(msg.key)
+      chai.assert.exists(msg.channel)
+      chai.assert.equal(msg.nonce, Client.nonce)
+      chai.assert.deepEqual(msg.appInfo, appInfo)
+
+      const attributes = { foo: 'bar' }
+      // save app
+      await Wallet.addApp(msg.token, msg.appInfo)
+      await Wallet.sendClaim(msg, attributes, true)
+
+      const apps = await Wallet.apps()
+      chai.assert.deepEqual(apps[msg.token], appInfo)
+
+      return new Promise(resolve => {
+        request.then(response => {
+          chai.assert.isTrue(response.allowed)
+          chai.assert.equal(response.did, Wallet.currentDID())
+          chai.assert.equal(response.token, msg.token)
+          chai.assert.deepEqual(response.claim, attributes)
+          // save this client claim for refresh test
+          clientClaim = response
+          return resolve()
+        })
+      })
+    })
+
+    it('Should successfully refresh a claim', async () => {
+      const request = Client.refreshProfile(clientClaim)
+
+      // give the wallet some time to process the request
+      await sleep(100)
+
+      const claim = await Wallet.getClaim(clientClaim.token)
+
+      return new Promise(resolve => {
+        request.then(async response => {
+          chai.assert.isTrue(response.allowed)
+          chai.assert.equal(response.did, Wallet.currentDID())
+          chai.assert.equal(response.token, clientClaim.token)
+          chai.assert.notEqual(response.refreshEncKey, clientClaim.refreshEncKey)
+
+          chai.assert.equal(response.refreshEncKey, claim.key)
+
+          resolve()
+        }).then(err => {
+          console.log(err)
+          resolve()
+        })
+      })
+    }).timeout(3000)
   })
 })
