@@ -1,8 +1,8 @@
 const Signalhub = require('signalhub') // might switch to SocketCluster later
 const BroadcastChannel = require('broadcast-channel').default
 const LeaderElection = require('broadcast-channel/leader-election')
-const generateId = require('./utils').generateId
-const crypto = require('./crypto')
+const SecureStore = require('secure-store')
+const WebCrypto = require('web-crypto')
 
 const APP_NAME = 'AKASHA'
 const HUB_URLS = ['localhost:8080']
@@ -27,7 +27,7 @@ const initHub = (hubUrls) => {
   return hub
 }
 
-class DIDclient {
+class Client {
   /**
     * Class constructor
     *
@@ -56,12 +56,12 @@ class DIDclient {
     */
   async registrationLink () {
     // generate a one time channel ID
-    this.loginChannel = generateId()
+    this.loginChannel = WebCrypto.genId()
     // generate NONCE
     this.nonce = this.genNonce()
     // generate a one time symmetric encryption key and reveal it to AKASHA.id
-    this.bootstrapKey = await crypto.genAESKey(true, 'AES-GCM', 128)
-    const extractedKey = await crypto.exportKey(this.bootstrapKey)
+    this.bootstrapKey = await WebCrypto.genAESKey(true, 'AES-GCM', 128)
+    const extractedKey = await WebCrypto.exportKey(this.bootstrapKey)
     const b64Key = Buffer.from(extractedKey).toString('base64')
     // use the wallet app URL for the link
     const loginUrl = new URL(this.config.walletUrl)
@@ -96,16 +96,16 @@ class DIDclient {
         hub.subscribe(this.loginChannel).on('data', async (data) => {
           data = JSON.parse(data)
           if (data.request === 'reqInfo') {
-            const msg = await crypto.decrypt(this.bootstrapKey, data.msg, 'base64')
+            const msg = await WebCrypto.decrypt(this.bootstrapKey, data.msg, 'base64')
             if (msg.nonce && msg.nonce === this.nonce) {
               // the AKASHA.id app is requesting app details
-              const encKey = await crypto.importKey(msg.encKey)
+              const encKey = await WebCrypto.importKey(Buffer.from(msg.encKey, 'base64'))
               // genereate new key
               // generate a one time symmetric encryption key and reveal it to AKASHA.id
-              this.bootstrapKey = await crypto.genAESKey(true, 'AES-GCM', 128)
-              const exportedKey = await crypto.exportKey(this.bootstrapKey)
+              this.bootstrapKey = await WebCrypto.genAESKey(true, 'AES-GCM', 128)
+              const exportedKey = await WebCrypto.exportKey(this.bootstrapKey)
               const b64Key = Buffer.from(exportedKey).toString('base64')
-              const encryptedMsg = await crypto.encrypt(encKey, {
+              const encryptedMsg = await WebCrypto.encrypt(encKey, {
                 token: msg.token,
                 nonce: msg.nonce,
                 appInfo: this.appInfo,
@@ -114,7 +114,7 @@ class DIDclient {
               hub.broadcast(this.loginChannel, JSON.stringify({ request: 'appInfo', msg: encryptedMsg }))
             }
           } else if (data.request === 'claim') {
-            const msg = await crypto.decrypt(this.bootstrapKey, data.msg, 'base64')
+            const msg = await WebCrypto.decrypt(this.bootstrapKey, data.msg, 'base64')
             if (msg.nonce && msg.nonce === this.nonce) {
               resolve(msg)
               debug('Got response:', msg)
@@ -144,11 +144,11 @@ class DIDclient {
     try {
       debug('Refreshing profile using:', channel, token, rawKey)
       // prepare request
-      const key = await crypto.importKey(rawKey)
+      const key = await WebCrypto.importKey(Buffer.from(rawKey, 'base64'))
       // encrypt message to be sent
       const nonce = this.genNonce()
-      const updateChannel = generateId()
-      const encryptedMsg = await crypto.encrypt(key, {
+      const updateChannel = WebCrypto.genId()
+      const encryptedMsg = await WebCrypto.encrypt(key, {
         nonce: nonce,
         channel: updateChannel
       }, 'base64')
@@ -159,7 +159,7 @@ class DIDclient {
           updateHub.subscribe(updateChannel).on('data', async (data) => {
             data = JSON.parse(data)
             if (data.request === 'claim') {
-              const msg = await crypto.decrypt(key, data.msg, 'base64')
+              const msg = await WebCrypto.decrypt(key, data.msg, 'base64')
               if (msg.nonce === nonce) {
                 resolve(msg)
                 this.cleanUp(updateHub)
@@ -192,43 +192,179 @@ class DIDclient {
   }
 }
 
-class DIDwallet {
+class Wallet {
   /**
     * Class constructor
     *
     * @param {string} id - A unique indetifier for the current user
     * @param {Object} options - Configuration options
     */
-  constructor (id, options = {}) {
-    // init config
-    this.id = id || generateId()
-    this.did = `did:akasha:${this.id}`
-    this.hubUrls = options.hubUrls ? options.hubUrls : HUB_URLS
-
+  constructor (options = {}) {
+    // load persistent config if available
+    this.conf = {}
+    this.hubUrls = options.hubUrls || HUB_URLS
+    this.electorChannel = new BroadcastChannel(APP_NAME)
     // debug
     DEBUGGING = options.debug ? options.debug : false
   }
 
   /**
-    * Initiate the listener
-    *
-    * @param {Function} refreshHandler - The handler function to trigger in case of a
-    * refresh request
-    */
-  init (refreshHandler) {
-    // only listen if we're master
-    // initiate the elector process
-    const electorChannel = new BroadcastChannel(APP_NAME)
-    const elector = LeaderElection.create(electorChannel)
-    elector.awaitLeadership().then(() => {
-      debug('This window is master -> now listening to refresh requests.')
-      this.listen(refreshHandler)
-    })
+   * Initialize the Wallet by loading all the profile IDs
+   */
+  async init () {
+    try {
+      this.profiles = await SecureStore._idb.get('profiles')
+      if (!this.profiles) {
+        this.profiles = {}
+      }
+    } catch (e) {
+      throw new Error(e)
+    }
   }
 
-  // Return the current DID
-  did () {
-    return this.did
+  /**
+    * Sign up a user
+    *
+    * @param {string} userId - The user identifier
+    * @param {string} passphrase - The user's passphrase
+    */
+  async signup (name, passphrase) {
+    if (!name || !passphrase) {
+      throw new Error('Both profile name and password are required')
+    }
+    // TODO: should use key derivation for future proof of ownership when
+    // generating a new ID
+    this.id = WebCrypto.genId()
+    // add this user to the local list of available accounts
+    await this.updateProfileList(this.id, {
+      name
+    })
+    // also log user in
+    await this.login(this.id, passphrase)
+  }
+
+  /**
+    * Log a user into a specific profile
+    *
+    * @param {string} userId - The user identifier
+    * @param {string} passphrase - The user's passphrase
+    */
+  async login (userId, passphrase) {
+    try {
+      this.id = userId
+      this.did = `did:akasha:${this.id}`
+      this.store = new SecureStore.Store(this.id, passphrase)
+      await this.store.init()
+
+      // only listen if we're master
+      // initiate the elector process
+
+      this.elector = LeaderElection.create(this.electorChannel)
+      this.elector.awaitLeadership().then(() => {
+        debug('This window is master -> now listening to refresh requests.')
+        this.listen()
+      })
+    } catch (e) {
+      throw new Error(e.message)
+    }
+  }
+
+  /**
+   * Log an user out of a specific profile
+   */
+  logout () {
+    this.cleanUp(this.hub)
+    this.elector.die()
+    this.elector = undefined
+    this.hub = undefined
+    this.id = undefined
+    this.did = undefined
+    this.store = undefined
+  }
+
+  /**
+   * Return the current list of profiles
+   */
+  publicProfiles () {
+    const profiles = []
+    const ids = Object.keys(this.profiles)
+    if (ids.length === 0) {
+      return profiles
+    }
+    ids.forEach(id => {
+      profiles.push({
+        id,
+        name: this.profiles[id].name,
+        picture: this.profiles[id].picture
+      })
+    })
+    return profiles
+  }
+
+  /**
+    * Update the list of profiles for a given userID
+    *
+    * @param {string} userId - The user identifier
+    * @param {Object} data - The user's (public) profile that is used when
+    * building the list
+    * @returns {Promise} - The promise that resolves upon successful completion of the
+    * data store operation
+    */
+  async updateProfileList (userId, data) {
+    if (!data.name) {
+      throw new Error('Missing name from profile')
+    }
+    try {
+      this.profiles[userId] = {
+        name: data.name,
+        picture: data.picture || undefined
+      }
+      await SecureStore._idb.set('profiles', this.profiles)
+    } catch (e) {
+      throw new Error(e)
+    }
+  }
+
+  /**
+   * Remove a local user profile
+   *
+   * @param {string} The user's profile ID
+   */
+  async removeProfile (id) {
+    try {
+      delete this.profiles[id]
+      await SecureStore._idb.set('profiles', this.profiles)
+    } catch (e) {
+      throw new Error(e)
+    }
+    await this.store.clear()
+    // TODO: remove the db and store (needs upstream implementation in idbkeyval)
+    this.logout()
+  }
+
+  /**
+    * Listener for 'refresh' requests coming from registered apps
+    *
+    * @param {Function} handler - The handler function to trigger in case of a
+    * refresh request
+    */
+  async listen (refreshHandler) {
+    // init query hub
+    this.hub = initHub(this.hubUrls)
+    try {
+      this.hub.subscribe(this.id).on('data', async (data) => {
+        data = JSON.parse(data)
+        switch (data.request) {
+          case 'refresh':
+            this.handleRefresh(data)
+            break
+          default:
+            break
+        }
+      })
+    } catch (e) {
+      debug(e)
+    }
   }
 
   /**
@@ -253,26 +389,24 @@ class DIDwallet {
     }
   }
 
-  /**
-    * Listener for 'refresh' requests coming from registered apps
-    *
-    * @param {Function} handler - The handler function to trigger in case of a
-    * refresh request
-    */
-  async listen (refreshHandler) {
-    // init query hub
-    const hub = initHub(this.hubUrls)
+  async handleRefresh (data) {
     try {
-      hub.subscribe(this.id).on('data', async (data) => {
-        data = JSON.parse(data)
-        switch (data.request) {
-          case 'refresh':
-            refreshHandler(data)
-            break
-          default:
-            break
-        }
-      })
+      const localData = await this.store.get(data.token)
+      if (!localData) {
+        // TODO: handle revoked apps
+        return
+      }
+      const key = await WebCrypto.importKey(Buffer.from(localData.key, 'base64'))
+      const req = await WebCrypto.decrypt(key, data.msg, 'base64')
+      debug('Got refresh request:', req)
+      await this.sendClaim({
+        channel: req.channel,
+        token: data.token,
+        key: localData.key,
+        nonce: req.nonce
+      },
+      localData.attributes,
+      true)
     } catch (e) {
       debug(e)
     }
@@ -299,15 +433,15 @@ class DIDwallet {
       throw new Error('Missing required paramaters when calling registeApp.')
     }
     // import encryption key
-    const key = await crypto.importKey(req.key)
+    const key = await WebCrypto.importKey(Buffer.from(req.key, 'base64'))
     // generate a unique token for the app
-    const token = generateId()
+    const token = WebCrypto.genId()
     // generate a symmetric encryption key for this app
-    const newKey = await crypto.genAESKey(true, 'AES-GCM', 128)
-    const expKey = await crypto.exportKey(newKey)
+    const newKey = await WebCrypto.genAESKey(true, 'AES-GCM', 128)
+    const expKey = await WebCrypto.exportKey(newKey)
     const encKey = Buffer.from(expKey).toString('base64')
     // encrypt reply message
-    const encryptedMsg = await crypto.encrypt(key, {
+    const encryptedMsg = await WebCrypto.encrypt(key, {
       token,
       encKey,
       nonce: req.nonce
@@ -318,12 +452,13 @@ class DIDwallet {
         hub.subscribe(req.channel).on('data', async (data) => {
           data = JSON.parse(data)
           if (data.request === 'appInfo') {
-            const msg = await crypto.decrypt(newKey, data.msg, 'base64')
+            const msg = await WebCrypto.decrypt(newKey, data.msg, 'base64')
             if (msg.token === token) {
               // add channel
               msg.channel = req.channel
+              resolve(msg)
               try {
-                resolve(msg)
+                await this.addApp(msg.token, msg.appInfo)
               } catch (e) {
                 debug(e)
               }
@@ -349,18 +484,18 @@ class DIDwallet {
     * @returns {Promise<Object>} - The data used for the claim once it has been sent,
     * to be stored by the wallet app
     */
-  async sendClaim (req, attributes, allowed) {
+  async sendClaim (req, attributes, allowed, cb) {
     // init hub connection
     const hub = initHub(this.hubUrls)
     if (!req || !req.channel || !req.key || !req.nonce) {
       throw new Error('Missing required paramaters when calling sendClaim. Got:', req)
     }
     // import encryption key
-    const key = await crypto.importKey(req.key)
+    const key = await WebCrypto.importKey(Buffer.from(req.key, 'base64'))
     // generate a unique token for the app
-    const token = req.token || generateId()
+    const token = req.token || WebCrypto.genId()
     // generate a symmetric encryption key for this app
-    const newKey = await crypto.exportKey(await crypto.genAESKey(true, 'AES-GCM', 128))
+    const newKey = await WebCrypto.exportKey(await WebCrypto.genAESKey(true, 'AES-GCM', 128))
     const refreshEncKey = Buffer.from(newKey).toString('base64')
     // encrypt reply message
     const msg = {
@@ -372,21 +507,15 @@ class DIDwallet {
       msg.token = token
       msg.refreshEncKey = refreshEncKey
     }
-    const encryptedMsg = await crypto.encrypt(key, msg, 'base64')
+    const encryptedMsg = await WebCrypto.encrypt(key, msg, 'base64')
     // broadcast msg back to the app
-    return new Promise((resolve) => {
-      hub.broadcast(req.channel, JSON.stringify({ request: 'claim', msg: encryptedMsg }), () => {
-        // resolve promise in order to store app settings if we allowed it
-        if (allowed) {
-          resolve({
-            token,
-            refreshEncKey,
-            attributes
-          })
-        }
-        // cleanup
-        this.cleanUp(hub)
-      })
+    hub.broadcast(req.channel, JSON.stringify({ request: 'claim', msg: encryptedMsg }), async () => {
+      // save app settings if we allowed it
+      if (allowed) {
+        await this.storeClaim(token, refreshEncKey, attributes)
+      }
+      // cleanup
+      this.cleanUp(hub)
     })
   }
 
@@ -406,6 +535,86 @@ class DIDwallet {
   }
 
   /**
+   * Store a given claim for an app
+   *
+   * @param {string} token The token identifying the app
+   * @param {string} key The encryption key used for the next request
+   * @param {Object} attributes The profile attributes shared with the app
+   * @returns {Promise} - The promise that resolves upon successful completion of the
+   * data store operation
+   */
+  storeClaim (token, key, attributes) {
+    return this.store.set(token, {
+      key: key,
+      attributes: attributes
+    })
+  }
+
+  /**
+   * Add an app to the local list of allowed apps
+   *
+   * @param {string} token The token specific to this app
+   * @param {Object} appInfo An object describing the app
+   * @returns {Promise} - The promise that resolves upon successful completion of the
+   * data store operation
+   */
+  async addApp (token, appInfo) {
+    if (!token || !appInfo) {
+      throw new Error(`Missing parameter when adding app: ${token}, ${JSON.stringify(appInfo)}`)
+    }
+    const exists = await this.store.get(token)
+    if (!exists) {
+      try {
+        const apps = await this.store.get('apps') || {}
+        apps[token] = appInfo
+        return this.store.set('apps', apps)
+      } catch (e) {
+        throw new Error(e)
+      }
+    }
+  }
+
+  /**
+   * Remove one app based on the provided token ID
+   *
+   * @param {string} appToken The token specific to a given app
+   * @returns {Promise} - The promise that resolves upon successful completion of the
+   * data store operation
+   */
+  async removeApp (appToken) {
+    if (this.store.get(appToken)) {
+      // remove claim
+      await this.store.del(appToken)
+      // also remove app from list
+      try {
+        const apps = await this.store.get('apps')
+        delete apps[appToken]
+        return this.store.set('apps', apps)
+      } catch (e) {
+        throw new Error(e)
+      }
+    }
+  }
+
+  /**
+   * Return the list all apps currently allowed
+   */
+  async apps () {
+    let apps
+    try {
+      apps = await this.store.get('apps')
+    } catch (e) {
+      throw new Error(e)
+    }
+    return apps || {}
+  }
+
+  // Return the current DID
+  did () {
+    return this.did
+  }
+
+  /**
     * Clean up the current request state and close the hub connection
     *
     * @param {Object} hub - The hub object
@@ -417,8 +626,6 @@ class DIDwallet {
 }
 
 module.exports = {
-  DIDclient,
-  DIDwallet,
-  generateId,
-  crypto
+  Client,
+  Wallet
 }

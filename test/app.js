@@ -4,6 +4,7 @@ const startBtn = document.getElementById('start')
 const acceptBtn = document.getElementById('accept')
 const rejectBtn = document.getElementById('reject')
 const appList = document.getElementById('list')
+const signupBtn = document.getElementById('signup')
 
 let appResponse = {}
 
@@ -14,116 +15,32 @@ const appInfo = {
   url: 'https://app.akasha.world'
 }
 
-let id
-
-try {
-  const conf = JSON.parse(window.localStorage.getItem('config'))
-  if (conf) {
-    id = conf.id || AKASHAid.generateId()
-  }
-  window.localStorage.setItem('config', JSON.stringify({ id }))
-} catch (e) {
-  console.log(e)
-}
-
-const client = new AKASHAid.DIDclient(appInfo, { debug: true })
-const wallet = new AKASHAid.DIDwallet(id, { debug: true })
-
-const storeClaim = (claim = {}) => {
-  window.localStorage.setItem(claim.token, JSON.stringify({
-    key: claim.refreshEncKey,
-    attributes: claim.attributes
-  }))
-}
-
-const handleRefresh = async (data) => {
-  try {
-    const localData = JSON.parse(window.localStorage.getItem(data.token))
-    if (!localData) {
-      // TODO: handle revoked apps
-      return
-    }
-    const key = await AKASHAid.crypto.importKey(localData.key)
-    const msg = await AKASHAid.crypto.decrypt(key, data.msg, 'base64')
-    const claim = await wallet.sendClaim({
-      channel: msg.channel,
-      token: data.token,
-      key: localData.key,
-      nonce: msg.nonce
-    },
-    localData.attributes,
-    true)
-    // persist new claim that was just issued
-    storeClaim(claim)
-  } catch (e) {
-    console.log(e)
-  }
-}
-
-const removeApp = (appToken) => {
-  if (window.localStorage.getItem(appToken)) {
-    // remove claim
-    window.localStorage.removeItem(appToken)
-    // also remove app from list
-    try {
-      const apps = JSON.parse(window.localStorage.getItem('apps'))
-      delete apps[appToken]
-      window.localStorage.setItem('apps', JSON.stringify(apps))
-    } catch (e) {
-      throw new Error(e)
-    }
-  }
-}
-
-const addApp = async (msg) => {
-  if (!msg.token || !msg.appInfo) {
-    throw new Error(`Missing parameter when adding app: ${msg.token}, ${JSON.stringify(msg.appInfo)}`)
-  }
-  let apps = {}
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem('apps'))
-    if (parsed) {
-      apps = parsed
-    }
-  } catch (e) {
-    throw new Error(e)
-  }
-
-  apps[msg.token] = msg.appInfo
-  window.localStorage.setItem('apps', JSON.stringify(apps))
-}
+const client = new window.AKASHAid.Client(appInfo, { debug: true })
+const wallet = new window.AKASHAid.Wallet({ debug: true })
 
 const listApps = async (wallet) => {
-  let apps = {}
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem('apps'))
-    if (parsed) {
-      apps = parsed
-    }
-  } catch (e) {
-    throw new Error(e)
-  }
+  const apps = await wallet.apps()
   appList.innerHTML = ''
-  if (Object.keys(apps).length === 0) {
-    return
-  }
-  Object.keys(apps).forEach((app) => {
-    const item = document.createElement('li')
-    item.innerText = JSON.stringify(apps[app], null, 2)
-    const removeBtn = document.createElement('button')
-    removeBtn.innerText = 'Remove app'
-    removeBtn.addEventListener('click', async () => {
-      // remove the app
-      removeApp(app)
-      // refresh list of apps to reflect removed item
-      listApps(wallet)
+  console.log('Apps:', apps)
+  const ids = Object.keys(apps)
+  if (ids.length > 0) {
+    ids.forEach((app) => {
+      const item = document.createElement('li')
+      item.innerText = JSON.stringify(apps[app], null, 2)
+      const removeBtn = document.createElement('button')
+      removeBtn.innerText = 'Remove app'
+      removeBtn.addEventListener('click', async () => {
+        await wallet.removeApp(app)
+        listApps(wallet)
+      })
+      item.appendChild(removeBtn)
+      appList.appendChild(item)
     })
-    item.appendChild(removeBtn)
-    appList.appendChild(item)
-  })
+  }
 }
 
 loginBtn.addEventListener('click', async () => {
+  // listen
   const link = await client.registrationLink()
   document.getElementById('link').innerText = link
   document.getElementById('request').value = link
@@ -132,6 +49,7 @@ loginBtn.addEventListener('click', async () => {
     document.getElementById('claim').innerText = JSON.stringify(response, null, 2)
     // response object
     appResponse = response
+    console.log(response)
     // get the channel ID for refresh from the user's DID in the claim
     const channel = appResponse['claim']['credentialSubject']['id'].split(':')[2]
     // add listener for refresh button
@@ -149,12 +67,25 @@ loginBtn.addEventListener('click', async () => {
   }
 }, false)
 
+// register/login user
+signupBtn.addEventListener('click', async () => {
+  await wallet.init()
+  const profiles = wallet.publicProfiles()
+  console.log('Local profiles:', profiles)
+  if (profiles.length > 0) {
+    const profile = profiles[0]
+    await wallet.login(profile.id, 'pass')
+    console.log('Logged in as user >>', profile.name)
+  } else {
+    await wallet.signup('test', 'pass')
+  }
+  listApps(wallet)
+}, false)
+
 startBtn.addEventListener('click', async () => {
-  wallet.init(handleRefresh)
   const str = document.getElementById('request').value.substring(29)
   try {
     const msg = await wallet.registerApp(str)
-    console.log('RegisterApp:', msg)
     document.getElementById('info').innerText = JSON.stringify(msg.appInfo, null, 2)
     const attributes = {
       name: 'J. Doe',
@@ -168,11 +99,7 @@ startBtn.addEventListener('click', async () => {
     }
     // add listener to accept button
     acceptBtn.addEventListener('click', async () => {
-      const claim = await wallet.sendClaim(msg, attributes, true)
-      // store app into local registry
-      addApp(msg)
-      // also store claim
-      storeClaim(claim)
+      await wallet.sendClaim(msg, attributes, true)
       listApps(wallet)
     })
   } catch (e) {
@@ -181,6 +108,7 @@ startBtn.addEventListener('click', async () => {
 }, false)
 
 rejectBtn.addEventListener('click', async () => {
+  wallet.init()
   const str = document.getElementById('request').value.substring(29)
   try {
     const msg = await wallet.registerApp(str)
@@ -190,6 +118,3 @@ rejectBtn.addEventListener('click', async () => {
     console.log(e)
   }
 }, false)
-
-// list apps if present
-listApps()
