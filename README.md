@@ -59,7 +59,7 @@ const response = await client.refreshProfile(channel, token, refreshEncKey)
 console.log(response) // returns a similar response object to the one in the previous step
 ```
 
-## DIDWallet
+## Wallet
 
 The "wallet" handles requests for the user's profile attributes. It is meant to be used by
 the AKASHA.id application, to exchange profile attributes with 3rd party applications.
