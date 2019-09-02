@@ -133,15 +133,17 @@ class Client {
     * @param {string} rawKey - The encryption key to use for the request message
     * @returns {Promise<Object>} - The refreshed profile claim
     */
-  async refreshProfile (channel, token, rawKey) {
-    if (!channel || !token || !rawKey) {
-      debug('refreshProfile:', channel, token, rawKey)
+  async refreshProfile (claim) {
+    if (!claim.did || !claim.token || !claim.refreshEncKey) {
+      debug('refreshProfile:', claim.did, claim.token, claim.refreshEncKey)
       throw new Error('You need to provide each of channel ID, app token, and encryption key for the request.')
     }
     try {
-      debug('Refreshing profile using:', channel, token, rawKey)
+      // get refresh channel from the user's DID by stripping 'did:akasha:'
+      const channel = this.getChannelFromDID(claim.did)
+      debug('Refreshing profile using:', channel, claim.token, claim.refreshEncKey)
       // prepare request
-      const key = await WebCrypto.importKey(Buffer.from(rawKey, 'base64'))
+      const key = await WebCrypto.importKey(Buffer.from(claim.refreshEncKey, 'base64'))
       // encrypt message to be sent
       const nonce = this.genNonce()
       const updateChannel = WebCrypto.genId()
@@ -164,7 +166,13 @@ class Client {
             }
           })
           // also broadcast request
-          updateHub.broadcast(channel, JSON.stringify({ request: 'refresh', token, msg: encryptedMsg }))
+          const toSend = {
+            request: 'refresh',
+            token: claim.token,
+            msg: encryptedMsg
+          }
+          debug('Sending refresh req:', toSend)
+          updateHub.broadcast(channel, JSON.stringify(toSend))
         } catch (e) {
           reject(e)
           this.cleanUp(updateHub)
@@ -174,6 +182,16 @@ class Client {
       debug(e)
       throw new Error(e)
     }
+  }
+
+  /**
+    * Return the channel ID from a DID
+    *
+    * @param {string} did - The user's DID
+    * @returns {string} - The channel ID
+    */
+  getChannelFromDID (did) {
+    return did.split(':')[2]
   }
 
   /**
@@ -203,7 +221,6 @@ class Wallet {
       throw new Error('Missing config details')
     }
     this.hubUrls = config.hubUrls
-    this.isLeader = false
     // debug
     DEBUGGING = config.debug ? config.debug : false
   }
@@ -265,7 +282,6 @@ class Wallet {
       this.elector.awaitLeadership().then(() => {
         debug('This window is master -> now listening to refresh requests.')
         this.listen()
-        this.isLeader = true
       })
     } catch (e) {
       throw new Error(e.message)
@@ -279,7 +295,6 @@ class Wallet {
     if (this.hub) await this.cleanUp(this.hub)
     if (this.elector) await this.elector.die()
     this.elector = undefined
-    this.isLeader = false
     this.hub = undefined
     this.id = undefined
     this.did = undefined
@@ -466,13 +481,8 @@ class Wallet {
             if (msg.token === token) {
               // add channel
               msg.channel = req.channel
-              resolve(msg)
-              try {
-                await this.addApp(msg.token, msg.appInfo)
-              } catch (e) {
-                debug(e)
-              }
               this.cleanUp(hub)
+              return resolve(msg)
             }
           }
         })
@@ -494,7 +504,7 @@ class Wallet {
     * @returns {Promise<Object>} - The data used for the claim once it has been sent,
     * to be stored by the wallet app
     */
-  async sendClaim (req, attributes, allowed) {
+  async sendClaim (req, attributes = {}, allowed) {
     if (!this.did) {
       throw new Error('Not logged in')
     }
@@ -516,6 +526,7 @@ class Wallet {
       nonce: req.nonce
     }
     if (allowed) {
+      msg.did = this.did
       // msg.claim = this.prepareClaim(attributes)
       msg.claim = attributes
       msg.token = token
