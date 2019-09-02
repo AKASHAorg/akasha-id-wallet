@@ -50,11 +50,11 @@ The response object will contain the following attributes, and it should be stor
 If the app would like to request an updated version of the profile data, it can send a `refreshProfile` request.
 
 ```JavaScript
-// We get the channel ID for refresh from the user's DID in the claim above
-const channel = response['claim']['credentialSubject']['id'].split(':')[2]
+// Use the previous claim we received during the registration above
+const claim = { ... }
 
 // The token and the refreshEncKey values are taked from the previous response (above)
-const response = await client.refreshProfile(channel, token, refreshEncKey)
+const response = await client.refreshProfile(claim)
 
 console.log(response) // returns a similar response object to the one in the previous step
 ```
