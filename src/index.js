@@ -302,6 +302,23 @@ class Wallet {
   }
 
   /**
+    * Update the passphrase that protects the encryption key for a profile
+    *
+    * @param {string} oldPass - The current password
+    * @param {string} newPass - The new password
+    * @returns {Promise} - A promise that resolves once the operation has completed
+    */
+  async updatePassphrase (oldPass, newPass) {
+    if (!this.did) {
+      throw new Error('Not logged in')
+    }
+    if (!oldPass || !newPass) {
+      throw new Error('Both old and new passwords must be provided')
+    }
+    return this.store.updatePassphrase(oldPass, newPass)
+  }
+
+  /**
    * Return the current list of profiles
    */
   publicProfiles () {
@@ -352,6 +369,9 @@ class Wallet {
   async removeProfile (id) {
     if (!this.did) {
       throw new Error('Not logged in')
+    }
+    if (!id) {
+      throw new Error('No profile id provided')
     }
     try {
       delete this.profiles[id]
@@ -411,6 +431,11 @@ class Wallet {
     }
   }
 
+  /**
+   * Handler for the profile refresh operations
+   *
+   * @param {Object} data - The request data coming from the app
+   */
   async handleRefresh (data) {
     try {
       const localData = await this.store.get(data.token)

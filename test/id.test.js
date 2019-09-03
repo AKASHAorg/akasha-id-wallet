@@ -24,7 +24,7 @@ describe('AKASHA ID', function () {
     walletUrl: 'http://localhost:3000'
   }
   const profileName = 'jane'
-  const profilePass = 'password1'
+  let profilePass = 'password1'
 
   let Client
   let Wallet
@@ -160,6 +160,26 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Both profile name and password are required')
     })
 
+    it('Should fail to remove a profile', async () => {
+      let err
+      try {
+        await Wallet.removeProfile('foo')
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Not logged in')
+    })
+
+    it('Should fail to update passphrase for a profile', async () => {
+      let err
+      try {
+        await await Wallet.updatePassphrase(profilePass, 'foobar')
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Not logged in')
+    })
+
     it('Should fail to list applications if no profile is selected', async () => {
       let err
       try {
@@ -281,6 +301,51 @@ describe('AKASHA ID', function () {
       await Wallet.login(profiles[0].id, profilePass)
 
       chai.assert.exists(Wallet.currentDID(), profiles[0].id)
+    })
+
+    it('Should fail to update the passphrase that protects the encryption key when given bad parameters', async () => {
+      let err
+      try {
+        await Wallet.updatePassphrase()
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Both old and new passwords must be provided')
+
+      try {
+        await Wallet.updatePassphrase('foo')
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Both old and new passwords must be provided')
+
+      try {
+        await Wallet.updatePassphrase(undefined, 'foo')
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Both old and new passwords must be provided')
+    })
+
+    it('Should update the passphrase that protects the encryption key', async () => {
+      await Wallet.updatePassphrase(profilePass, 'foobar')
+      await Wallet.logout()
+
+      const profiles = Wallet.publicProfiles()
+      await Wallet.login(profiles[0].id, 'foobar')
+      chai.assert.exists(Wallet.currentDID(), profiles[0].id)
+      // update it for the future
+      profilePass = 'foobar'
+    })
+
+    it('Should fail to remove a profile if no ID was provided', async () => {
+      let err
+      try {
+        await Wallet.removeProfile()
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'No profile id provided')
     })
 
     it('Should remove an existing profile and log the user out', async () => {
@@ -506,7 +571,7 @@ describe('AKASHA ID', function () {
       const request = Client.refreshProfile(clientClaim)
 
       // give the wallet some time to process the request
-      await sleep(100)
+      await sleep(200)
 
       const claim = await Wallet.getClaim(clientClaim.token)
 
@@ -525,6 +590,6 @@ describe('AKASHA ID', function () {
           resolve()
         })
       })
-    }).timeout(3000)
+    })
   })
 })
