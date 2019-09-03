@@ -151,6 +151,12 @@ const janeProfile = profiles[0]
 await wallet.removeProfile(janeProfile.id)
 ```
 
+### Update the passphrase that is used to protect the encryption key
+
+```js
+await Wallet.updatePassphrase(oldPass, newPass)
+```
+
 
 ## Handling new apps
 
