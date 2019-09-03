@@ -50,11 +50,11 @@ The response object will contain the following attributes, and it should be stor
 If the app would like to request an updated version of the profile data, it can send a `refreshProfile` request.
 
 ```JavaScript
-// We get the channel ID for refresh from the user's DID in the claim above
-const channel = response['claim']['credentialSubject']['id'].split(':')[2]
+// Use the previous claim we received during the registration above
+const claim = { ... }
 
 // The token and the refreshEncKey values are taked from the previous response (above)
-const response = await client.refreshProfile(channel, token, refreshEncKey)
+const response = await client.refreshProfile(claim)
 
 console.log(response) // returns a similar response object to the one in the previous step
 ```
@@ -99,8 +99,8 @@ Once the `signup()` call has completed the user will be logged in by default.
 const profileName = 'jane'
 const passphrase = 'some super secure pass'
 
-await wallet.signup(profileName, passphrase)
-// jane is now logged in, you can now list apps
+const id = await wallet.signup(profileName, passphrase)
+// jane is now logged in, you can now list apps or do something with the profile ID
 ```
 
 ### Login
@@ -193,11 +193,15 @@ const attributes = { ... }
 
 ...
 
+// don't forget to add the app to the user's list of allowed apps
+await wallet.addApp(request.token, request.appInfo)
+
 // send the claim
-await wallet.sendClaim(request, attributes, true) // 
+await wallet.sendClaim(request, attributes, true) 
 ```
 
-You can also use `false` and `null/empty` attributes obj to deny a request.
+You can also use `false` and `null/empty` attributes obj to deny a request. In this case you will
+not have to save the app to the list though.
 
 ```JavaScript
 await wallet.sendClaim(request, null, false)
