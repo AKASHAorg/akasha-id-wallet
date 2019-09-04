@@ -140,6 +140,26 @@ janeProfile.name = 'janedoe'
 await wallet.updateProfileList (userId, data)
 ```
 
+### Load the current private profile
+
+This is the full profile that contains a list of attributes which can be used to create a claim
+for a 3rd party application.
+
+```js
+const userProfile = await wallet.profile()
+// console.log(userProfile) -> { givenName: 'foo', email: 'foo@bar.org' }
+```
+
+### Update the current private profile
+
+```js
+const profile = {
+    givenName: 'foo',
+    email: 'foo@example.org' // we changed the email
+}
+await Wallet.updateProfile(profile)
+```
+
 ### Remove a profile
 
 ```js
@@ -195,7 +215,7 @@ The wallet app can now use the `appInfo` data to display a modal/page to the use
 ...
 
 // collect all the selected attributes in an attributes object
-const attributes = { ... }
+const attributes = ['givenName', 'email']
 
 ...
 

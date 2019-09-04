@@ -239,6 +239,7 @@ class Wallet {
     }
   }
 
+  /* ------------- User API ------------- */
   /**
     * Sign up a user
     *
@@ -302,6 +303,30 @@ class Wallet {
   }
 
   /**
+   * Return the full profile for the current user
+   *
+   * @returns {Promise<Object>} - A promise that contains the profile object
+   */
+  async profile () {
+    this.isLoggedIn()
+    return this.store.get('profile')
+  }
+
+  /**
+   * Save full profile for the current user
+   *
+   * @param {string} oldPass - The current password
+   * @returns {Promise} - A promise that resolves once the operation has completed
+   */
+  async updateProfile (data) {
+    this.isLoggedIn()
+    if (!data) {
+      throw new Error('No profile data present')
+    }
+    return this.store.set('profile', data)
+  }
+
+  /**
     * Update the passphrase that protects the encryption key for a profile
     *
     * @param {string} oldPass - The current password
@@ -309,9 +334,7 @@ class Wallet {
     * @returns {Promise} - A promise that resolves once the operation has completed
     */
   async updatePassphrase (oldPass, newPass) {
-    if (!this.did) {
-      throw new Error('Not logged in')
-    }
+    this.isLoggedIn()
     if (!oldPass || !newPass) {
       throw new Error('Both old and new passwords must be provided')
     }
@@ -355,6 +378,7 @@ class Wallet {
         name: data.name,
         picture: data.picture || undefined
       }
+      // Use the raw idb object to set the profiles in the default (public) store
       await SecureStore._idb.set('profiles', this.profiles)
     } catch (e) {
       throw new Error(e)
@@ -367,9 +391,7 @@ class Wallet {
    * @param {string} The user's profile ID
    */
   async removeProfile (id) {
-    if (!this.did) {
-      throw new Error('Not logged in')
-    }
+    this.isLoggedIn()
     if (!id) {
       throw new Error('No profile id provided')
     }
@@ -383,6 +405,13 @@ class Wallet {
     // TODO: remove the db and store (needs upstream implementation in idbkeyval)
     await this.logout()
   }
+
+  // Return the current DID
+  currentDID () {
+    return this.did
+  }
+
+  /* ------------- Requests API ------------- */
 
   /**
     * Listener for 'refresh' requests coming from registered apps
@@ -459,6 +488,71 @@ class Wallet {
     }
   }
 
+  /* ------------- App API ------------- */
+
+  /**
+   * Add an app to the local list of allowed apps
+   *
+   * @param {string} token The token specific to this app
+   * @param {Object} appInfo An object describing the app
+   * @returns {Promise} - The promise that resolves upon successful completion of the
+   * data store operation
+   */
+  async addApp (token, appInfo) {
+    this.isLoggedIn()
+    // TODO: validate appInfo schema before storing
+    if (!token || !appInfo) {
+      throw new Error('Missing parameter when adding app')
+    }
+    const exists = await this.store.get(token)
+    if (!exists) {
+      try {
+        const apps = await this.store.get('apps') || {}
+        apps[token] = appInfo
+        return this.store.set('apps', apps)
+      } catch (e) {
+        throw new Error(e)
+      }
+    }
+  }
+
+  /**
+   * Remove one app based on the provided token ID
+   *
+   * @param {string} appToken The token specific to a given app
+   * @returns {Promise} - The promise that resolves upon successful completion of the
+   * data store operation
+   */
+  async removeApp (token) {
+    this.isLoggedIn()
+    if (this.store.get(token)) {
+      // also remove claim
+      await this.store.del(token)
+      // also remove app from list
+      try {
+        const apps = await this.store.get('apps')
+        delete apps[token]
+        return this.store.set('apps', apps)
+      } catch (e) {
+        throw new Error(e)
+      }
+    }
+  }
+
+  /**
+   * Return the list all apps currently allowed
+   */
+  async apps () {
+    this.isLoggedIn()
+    let apps
+    try {
+      apps = await this.store.get('apps')
+    } catch (e) {
+      throw new Error(e)
+    }
+    return apps || {}
+  }
+
   /**
     * Set up an initial exchange to receive app information
     *
@@ -467,9 +561,7 @@ class Wallet {
     * @returns {Promise<Object>} - The application token and data to be stored by the wallet app
     */
   async registerApp (data) {
-    if (!this.did) {
-      throw new Error('Not logged in')
-    }
+    this.isLoggedIn()
     // parse the request data from the client
     let req
     try {
@@ -530,9 +622,7 @@ class Wallet {
     * to be stored by the wallet app
     */
   async sendClaim (req, attributes = {}, allowed) {
-    if (!this.did) {
-      throw new Error('Not logged in')
-    }
+    this.isLoggedIn()
     // init hub connection
     const hub = initHub(this.hubUrls)
     if (!req || !req.channel || !req.key || !req.nonce) {
@@ -552,8 +642,7 @@ class Wallet {
     }
     if (allowed) {
       msg.did = this.did
-      // msg.claim = this.prepareClaim(attributes)
-      msg.claim = attributes
+      msg.claim = await this.prepareClaim(attributes)
       msg.token = token
       msg.refreshEncKey = refreshEncKey
     }
@@ -570,16 +659,26 @@ class Wallet {
   }
 
   // TODO: decide if we continue to use VCs or not
-  prepareClaim (attributes) {
-    if (!attributes.id) {
-      attributes.id = this.did
+  async prepareClaim (attributes) {
+    this.isLoggedIn()
+    if (!attributes || attributes.length === 0) {
+      throw new Error('Missing attributes when preparing claim')
     }
+    const credential = {}
+
+    const profile = await this.profile()
+    attributes.forEach(attr => {
+      if (profile[attr]) credential[attr] = profile[attr]
+    })
+    // also add the did
+    credential.id = this.did
+    // return the formatted VC
     return {
       '@context': ['https://www.w3.org/2018/credentials/v1', 'https://schema.org/'],
       type: ['VerifiableCredential', 'IdentityCredential'],
       issuer: this.did,
       issuanceDate: new Date().toISOString(),
-      credentialSubject: attributes,
+      credentialSubject: credential,
       proof: {}
     }
   }
@@ -594,9 +693,7 @@ class Wallet {
    * data store operation
    */
   addClaim (token, key, attributes) {
-    if (!this.did) {
-      throw new Error('Not logged in')
-    }
+    this.isLoggedIn()
     if (!token || !key || !attributes) {
       throw new Error('Missing parameter when adding claim')
     }
@@ -614,9 +711,7 @@ class Wallet {
    * data store operation
    */
   getClaim (token) {
-    if (!this.did) {
-      throw new Error('Not logged in')
-    }
+    this.isLoggedIn()
     return this.store.get(token)
   }
 
@@ -628,84 +723,14 @@ class Wallet {
    * data store operation
    */
   removeClaim (token) {
-    if (!this.did) {
-      throw new Error('Not logged in')
-    }
+    this.isLoggedIn()
     return this.store.del(token)
   }
 
-  /**
-   * Add an app to the local list of allowed apps
-   *
-   * @param {string} token The token specific to this app
-   * @param {Object} appInfo An object describing the app
-   * @returns {Promise} - The promise that resolves upon successful completion of the
-   * data store operation
-   */
-  async addApp (token, appInfo) {
+  isLoggedIn () {
     if (!this.did) {
       throw new Error('Not logged in')
     }
-    // TODO: validate appInfo schema before storing
-    if (!token || !appInfo) {
-      throw new Error('Missing parameter when adding app')
-    }
-    const exists = await this.store.get(token)
-    if (!exists) {
-      try {
-        const apps = await this.store.get('apps') || {}
-        apps[token] = appInfo
-        return this.store.set('apps', apps)
-      } catch (e) {
-        throw new Error(e)
-      }
-    }
-  }
-
-  /**
-   * Remove one app based on the provided token ID
-   *
-   * @param {string} appToken The token specific to a given app
-   * @returns {Promise} - The promise that resolves upon successful completion of the
-   * data store operation
-   */
-  async removeApp (token) {
-    if (!this.did) {
-      throw new Error('Not logged in')
-    }
-    if (this.store.get(token)) {
-      // also remove claim
-      await this.store.del(token)
-      // also remove app from list
-      try {
-        const apps = await this.store.get('apps')
-        delete apps[token]
-        return this.store.set('apps', apps)
-      } catch (e) {
-        throw new Error(e)
-      }
-    }
-  }
-
-  /**
-   * Return the list all apps currently allowed
-   */
-  async apps () {
-    if (!this.did) {
-      throw new Error('Not logged in')
-    }
-    let apps
-    try {
-      apps = await this.store.get('apps')
-    } catch (e) {
-      throw new Error(e)
-    }
-    return apps || {}
-  }
-
-  // Return the current DID
-  currentDID () {
-    return this.did
   }
 
   /**

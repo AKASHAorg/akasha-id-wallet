@@ -170,6 +170,26 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
+    it('Should fail to save a private profile', async () => {
+      let err
+      try {
+        await Wallet.updateProfile({})
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Not logged in')
+    })
+
+    it('Should fail to get a private profile', async () => {
+      let err
+      try {
+        await Wallet.profile({})
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Not logged in')
+    })
+
     it('Should fail to update passphrase for a profile', async () => {
       let err
       try {
@@ -240,6 +260,16 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
+    it('Should fail to prepare a claim if no profile is selected', async () => {
+      let err
+      try {
+        await Wallet.prepareClaim([])
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Not logged in')
+    })
+
     it('Should fail to remove a claim if no profile is selected', async () => {
       let err
       try {
@@ -301,6 +331,28 @@ describe('AKASHA ID', function () {
       await Wallet.login(profiles[0].id, profilePass)
 
       chai.assert.exists(Wallet.currentDID(), profiles[0].id)
+    })
+
+    it('Should fail to save a profile when given bad parameters', async () => {
+      let err
+      try {
+        await Wallet.updateProfile()
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'No profile data present')
+    })
+
+    it('Should successfully set the profile', async () => {
+      chai.assert.isUndefined(await Wallet.profile())
+      const profile = {
+        name: 'foo bar',
+        familyName: 'bar',
+        givenName: 'foo',
+        email: 'foo@bar.org'
+      }
+      await Wallet.updateProfile(profile)
+      chai.assert.isDefined(await Wallet.profile())
     })
 
     it('Should fail to update the passphrase that protects the encryption key when given bad parameters', async () => {
@@ -479,7 +531,7 @@ describe('AKASHA ID', function () {
     it('Should successfully add a claim for the current user', async () => {
       let err
       try {
-        await Wallet.addClaim('foo', 'bar', { foo: 'bar' })
+        await Wallet.addClaim('foo', 'bar', ['givenName', 'email'])
       } catch (error) {
         err = error
       }
@@ -489,8 +541,46 @@ describe('AKASHA ID', function () {
     it('Should successfully get a claim using the provided token', async () => {
       const claim = await Wallet.getClaim('foo')
 
-      chai.assert.deepEqual(claim.attributes, { foo: 'bar' })
+      chai.assert.deepEqual(claim.attributes, ['givenName', 'email'])
       chai.assert.equal(claim.key, 'bar')
+    })
+
+    it('Should fail to prepare a claim without proper parameters', async () => {
+      let err
+      try {
+        await Wallet.prepareClaim()
+      } catch (error) {
+        err = error
+      }
+      chai.assert.include(err.message, 'Missing attributes when preparing claim')
+
+      try {
+        await Wallet.prepareClaim([])
+      } catch (error) {
+        err = error
+      }
+      chai.assert.include(err.message, 'Missing attributes when preparing claim')
+    })
+
+    it('Should successfully prepare a claim using the provided attributes', async () => {
+      const profile = {
+        name: 'foo bar',
+        familyName: 'bar',
+        givenName: 'foo',
+        email: 'foo@bar.org'
+      }
+      await Wallet.updateProfile(profile)
+
+      const claim = await Wallet.getClaim('foo')
+
+      const prepared = await Wallet.prepareClaim(claim.attributes)
+      const attributes = Object.keys(prepared.credentialSubject)
+      // check if we have all the attributes and values
+      claim.attributes.forEach(attr => {
+        chai.assert.equal(profile[attr], prepared.credentialSubject[attr])
+      })
+      // also check if DID is there
+      chai.assert.include(attributes, 'id')
     })
 
     it('Should successfully remove a claim using the provided token', async () => {
@@ -505,6 +595,13 @@ describe('AKASHA ID', function () {
     // first we create a valid profile
     before(async () => {
       await Wallet.signup(profileName, profilePass)
+      const profile = {
+        name: 'foo bar',
+        familyName: 'bar',
+        givenName: 'foo',
+        email: 'foo@bar.org'
+      }
+      await Wallet.updateProfile(profile)
       await sleep(300)
     })
 
@@ -518,7 +615,7 @@ describe('AKASHA ID', function () {
       await sleep(100)
 
       const msg = await Wallet.registerApp(link.substring(config.walletUrl.length))
-      await Wallet.sendClaim(msg, {}, false)
+      await Wallet.sendClaim(msg, [], false)
 
       const apps = await Wallet.apps()
       chai.assert.isEmpty(apps)
@@ -546,7 +643,7 @@ describe('AKASHA ID', function () {
       chai.assert.equal(msg.nonce, Client.nonce)
       chai.assert.deepEqual(msg.appInfo, appInfo)
 
-      const attributes = { foo: 'bar' }
+      const attributes = ['givenName', 'email']
       // save app
       await Wallet.addApp(msg.token, msg.appInfo)
       await Wallet.sendClaim(msg, attributes, true)
@@ -554,12 +651,18 @@ describe('AKASHA ID', function () {
       const apps = await Wallet.apps()
       chai.assert.deepEqual(apps[msg.token], appInfo)
 
+      const profile = await Wallet.profile()
+
       return new Promise(resolve => {
         request.then(response => {
           chai.assert.isTrue(response.allowed)
           chai.assert.equal(response.did, Wallet.currentDID())
           chai.assert.equal(response.token, msg.token)
-          chai.assert.deepEqual(response.claim, attributes)
+          chai.assert.isDefined(response.claim)
+          // check if we have all the attributes and values
+          attributes.forEach(attr => {
+            chai.assert.equal(profile[attr], response.claim.credentialSubject[attr])
+          })
           // save this client claim for refresh test
           clientClaim = response
           return resolve()
@@ -581,9 +684,7 @@ describe('AKASHA ID', function () {
           chai.assert.equal(response.did, Wallet.currentDID())
           chai.assert.equal(response.token, clientClaim.token)
           chai.assert.notEqual(response.refreshEncKey, clientClaim.refreshEncKey)
-
           chai.assert.equal(response.refreshEncKey, claim.key)
-
           resolve()
         }).then(err => {
           console.log(err)
