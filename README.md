@@ -157,7 +157,7 @@ const profile = {
     givenName: 'foo',
     email: 'foo@example.org' // we changed the email
 }
-await Wallet.updateProfile(profile)
+await wallet.updateProfile(profile)
 ```
 
 ### Remove a profile
