@@ -12,9 +12,9 @@
     },
     "dependencies": {
         "broadcast-channel": "^2.2.0",
-        "signalhub": "^4.9.0",
-        "web-crypto": "git+https://github.com/deiu/web-crypto",
-        "secure-store": "git+https://github.com/deiu/secure-store"
+        "easy-web-crypto": "^1.0.4",
+        "secure-webstore": "^1.1.0",
+        "signalhub": "^4.9.0"
     },
     "devDependencies": {
         "babel": "^6.23.0",
