@@ -190,6 +190,16 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
+    it('Should fail to export a private profile', async () => {
+      let err
+      try {
+        await Wallet.exportProfile()
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Not logged in')
+    })
+
     it('Should fail to update passphrase for a profile', async () => {
       let err
       try {
@@ -353,6 +363,38 @@ describe('AKASHA ID', function () {
       }
       await Wallet.updateProfile(profile)
       chai.assert.isDefined(await Wallet.profile())
+    })
+
+    it('Should successfully export the current profile', async () => {
+      const dump = await Wallet.exportProfile()
+      const publicProfile = Wallet.publicProfiles()[0]
+
+      chai.assert.equal(dump.id, publicProfile.id)
+      chai.assert.equal(dump.publicProfile.name, publicProfile.name)
+    })
+
+    it('Should successfully import a profile using the same', async () => {
+      const dump = await Wallet.exportProfile()
+
+      let profile = await Wallet.profile()
+      const oldName = profile.name
+      profile.name = 'foo' // was 'foo bar'
+      await Wallet.updateProfile(profile)
+
+      await Wallet.importProfile(dump, profilePass)
+      profile = await Wallet.profile()
+      chai.assert.equal(profile.name, oldName)
+    })
+
+    it('Should successfully import a profile using a different name', async () => {
+      const newName = 'joanne'
+
+      const dump = await Wallet.exportProfile()
+
+      await Wallet.importProfile(dump, profilePass, newName)
+
+      const publicProfile = Wallet.publicProfiles()[0]
+      chai.assert.equal(newName, publicProfile.name)
     })
 
     it('Should fail to update the passphrase that protects the encryption key when given bad parameters', async () => {
@@ -594,6 +636,7 @@ describe('AKASHA ID', function () {
   context('Client <-> Wallet e2e', () => {
     // first we create a valid profile
     before(async () => {
+      await Wallet.logout()
       await Wallet.signup(profileName, profilePass)
       const profile = {
         name: 'foo bar',
