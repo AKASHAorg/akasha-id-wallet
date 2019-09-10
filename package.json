@@ -5,7 +5,7 @@
     "main": "dist/akasha-id-lib.js",
     "module": "src/index.js",
     "scripts": {
-        "build": "webpack -p && cp ./dist/* ./test/",
+        "build": "webpack -p",
         "testhub": "node ./node_modules/signalhub/bin.js -p 8888 listen &>/dev/null",
         "test-only": "concurrently -k -s first \"npm run testhub\" \"mocha-headless-chrome -f ./test/index.html\"",
         "test": "npm run build && npm run test-only"
