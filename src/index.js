@@ -1,8 +1,8 @@
 const Signalhub = require('signalhub') // might switch to SocketCluster later
 const BroadcastChannel = require('broadcast-channel').default
 const LeaderElection = require('broadcast-channel/leader-election')
-const SecureStore = require('secure-store')
-const WebCrypto = require('web-crypto')
+const SecureStore = require('secure-webstore')
+const WebCrypto = require('easy-web-crypto')
 
 const APP_NAME = 'AKASHA'
 
@@ -299,6 +299,7 @@ class Wallet {
     this.hub = undefined
     this.id = undefined
     this.did = undefined
+    this.store.close()
     this.store = undefined
   }
 
@@ -404,6 +405,58 @@ class Wallet {
     await this.store.clear()
     // TODO: remove the db and store (needs upstream implementation in idbkeyval)
     await this.logout()
+  }
+
+  /**
+   * Export current profile and all the apps and claims that go with it
+   * as a single JSON object.
+   *
+   * @returns {Promise<Object>} - A promise containing the exported data
+   */
+  async exportProfile () {
+    this.isLoggedIn()
+    return {
+      id: this.id,
+      publicProfile: this.profiles[this.id],
+      store: await this.store.export()
+    }
+  }
+
+  /**
+   * Import a profile and all the apps and claims that go with it
+   * as a single JSON object.
+   * ATTENTION: it will overwrite any existing profile with the same
+   * id!
+   *
+   * @param {Object} data - A JSON object with the encrypted dump
+   * @param {string} passphrase - The passphrase that encrypts the data
+   * @param {string} name - Profile name (if provided can be used to
+   * import the data under a new profile name)
+   *
+   * @returns {Promise} - The promise that resolves upon successful
+   * completion of the import operation
+   */
+  async importProfile (data, passphrase, name) {
+    if (!passphrase) {
+      throw new Error('Password is required')
+    }
+    if (!data.id || !data.store) {
+      throw new Error('Missing attributes in the data to be imported')
+    }
+    // set up the store
+    const store = new SecureStore.Store(data.id, passphrase)
+    await store.init()
+    await store.import(data.store)
+    store.close()
+
+    // also update list of profiles
+    const publicProfile = data.publicProfile || {}
+    // specify/update name if so desired
+    if (name) {
+      publicProfile.name = name
+    }
+
+    return this.updateProfileList(data.id, publicProfile)
   }
 
   // Return the current DID
