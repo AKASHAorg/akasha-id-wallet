@@ -6,8 +6,8 @@ module.exports = {
   devtool: 'source-map',
   output: {
     path: path.resolve(__dirname, 'dist'),
-    filename: 'akasha-id-lib.js',
-    library: 'AKASHAid',
+    filename: 'akasha-id-wallet.js',
+    library: 'AKASHAidWallet',
     libraryTarget: 'umd',
     umdNamedDefine: true
   },

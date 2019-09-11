@@ -1,7 +1,8 @@
 /* eslint-env mocha */
 /* global chai */
 
-const AKASHAid = window.AKASHAid
+const IdWallet = window.AKASHAidWallet
+const IdClient = window.AKASHAidClient
 
 const sleep = timeout => {
   return new Promise(resolve => {
@@ -26,92 +27,28 @@ describe('AKASHA ID', function () {
   const profileName = 'jane'
   let profilePass = 'password1'
 
-  let Client
+  const Client = new IdClient(appInfo, config)
   let Wallet
-
-  context('Init Client', () => {
-    it('Should fail to instantiate Client without appInfo', () => {
-      let err
-      try {
-        Client = new AKASHAid.Client(undefined, {})
-      } catch (error) {
-        err = error
-      }
-      chai.assert.equal(err.message, 'Missing app details')
-    })
-
-    it('Should fail to instantiate Client without config', () => {
-      let err
-      try {
-        Client = new AKASHAid.Client(appInfo, undefined)
-      } catch (error) {
-        err = error
-      }
-      chai.assert.equal(err.message, 'Missing config details')
-
-      try {
-        Client = new AKASHAid.Client(appInfo, {})
-      } catch (error) {
-        err = error
-      }
-      chai.assert.equal(err.message, 'Missing config details')
-
-      try {
-        Client = new AKASHAid.Client(appInfo, { hubUrls: 'http://localhost:8888' })
-      } catch (error) {
-        err = error
-      }
-      chai.assert.equal(err.message, 'Missing config details')
-
-      try {
-        Client = new AKASHAid.Client(appInfo, { walletUrl: 'http://localhost:8888' })
-      } catch (error) {
-        err = error
-      }
-      chai.assert.equal(err.message, 'Missing config details')
-    })
-
-    it('Should successfully instantiate Client with proper parameters', () => {
-      let err
-      try {
-        Client = new AKASHAid.Client(appInfo, config)
-      } catch (error) {
-        err = error
-      }
-      chai.assert.isUndefined(err)
-    })
-  })
-
-  context('Client API', () => {
-    it('Should successfully generate registration links', async () => {
-      const link = await Client.registrationLink()
-      const walletStr = link.substring(0, config.walletUrl.length)
-      const reqStr = link.substring(config.walletUrl.length)
-
-      chai.assert.equal(walletStr, config.walletUrl)
-      chai.assert.equal(reqStr.length, 96)
-    })
-  })
 
   context('Init Wallet', () => {
     it('Should fail to instantiate Wallet without config', () => {
       let err
       try {
-        Wallet = new AKASHAid.Wallet()
+        Wallet = new IdWallet()
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Missing config details')
 
       try {
-        Wallet = new AKASHAid.Wallet({})
+        Wallet = new IdWallet({})
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Missing config details')
 
       try {
-        Wallet = new AKASHAid.Wallet({ debug: true })
+        Wallet = new IdWallet({ debug: true })
       } catch (error) {
         err = error
       }
@@ -121,7 +58,7 @@ describe('AKASHA ID', function () {
     it('Should successfully init Wallet with proper parameters', async () => {
       let err
       try {
-        Wallet = new AKASHAid.Wallet(config)
+        Wallet = new IdWallet(config)
         await Wallet.init()
       } catch (error) {
         err = error

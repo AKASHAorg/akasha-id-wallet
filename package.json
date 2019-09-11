@@ -1,8 +1,8 @@
 {
-    "name": "akasha-id-lib",
+    "name": "akasha-id-wallet",
     "version": "1.0.0",
-    "description": "Client/server library for AKASHA.id",
-    "main": "dist/akasha-id-lib.js",
+    "description": "Wallet library for AKASHA.id",
+    "main": "dist/akasha-id-wallet.js",
     "module": "src/index.js",
     "scripts": {
         "build": "webpack -p",
@@ -24,7 +24,8 @@
         "mocha-headless-chrome": "^2.0.3",
         "standard": "^13.1.0",
         "webpack": "^4.39.2",
-        "webpack-cli": "^3.3.6"
+        "webpack-cli": "^3.3.6",
+        "akasha-id-client": "git+https://github.com/AkashaProject/akasha-id-client"
     },
-    "author": "AKASHA"
+    "author": "Andrei Sambra <andrei.sambra@akasha.world> (https://akasha.org/)"
 }
