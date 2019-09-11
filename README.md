@@ -7,15 +7,23 @@ exchange profile attributes with 3rd party applications.
 
 ### Via `<script>` tag
 
-You can call `window.AKASHAidClient` in browsers by using `dist/akasha-id-client.js`.
+You can call `window.AKASHAidWallet` in browsers by using `dist/akasha-id-wallet.js`.
+
+### Via npm
+
+`npm install --save git+https://github.com/AkashaProject/akasha-id-wallet`
+
+```js
+const Wallet = require('akasha-id-wallet')
+```
 
 # Wallet API
 
 When instantiating the wallet, you can pass an optional configuration parameter (as an object)
-that contains the `hubUrls`. The hubs values must be the same as the ones used by the `Client`.
+that contains the `hubUrls`.
 
 ```js
-const Wallet = require('akasha-id-lib').Wallet
+const Wallet = require('akasha-id-wallet')
 
 const config = {
     hubUrls: ['https://examplehub1.com'],
