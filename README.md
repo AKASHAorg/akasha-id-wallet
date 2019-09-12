@@ -181,8 +181,9 @@ The `request` contents will look similar to the object below.
 ```
 
 The wallet app can now use the `appInfo` data to display a modal/page to the user, informing them about the app that is currently requesting access to the profile elements. At the same time, it
-can also inform the user at to what attributes they should disclose specifically for this app,
-out of all the profile attributes they may have in their AKASHA.id profile.
+can also inform the user at to what attributes they should disclose specifically for this app --
+e.g. `attributes: ['name', 'email']` above -- out of all the profile attributes they may have in
+their AKASHA.id profile.
 
 ```js
 ...
