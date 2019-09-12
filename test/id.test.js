@@ -595,6 +595,8 @@ describe('AKASHA ID', function () {
       await sleep(100)
 
       const msg = await Wallet.registerApp(link.substring(config.walletUrl.length))
+      chai.assert.isUndefined(msg.attributes)
+
       await Wallet.sendClaim(msg, [], false)
 
       const apps = await Wallet.apps()
@@ -610,9 +612,11 @@ describe('AKASHA ID', function () {
     })
 
     it('Should successfully register a new app from a request we allowed', async () => {
+      const attributes = ['name', 'email']
+
       const link = await Client.registrationLink()
 
-      const request = Client.requestProfile()
+      const request = Client.requestProfile(attributes)
       // give the client some time to setup listener
       await sleep(100)
 
@@ -622,8 +626,8 @@ describe('AKASHA ID', function () {
       chai.assert.exists(msg.channel)
       chai.assert.equal(msg.nonce, Client.nonce)
       chai.assert.deepEqual(msg.appInfo, appInfo)
+      chai.assert.deepEqual(msg.attributes, attributes)
 
-      const attributes = ['givenName', 'email']
       // save app
       await Wallet.addApp(msg.token, msg.appInfo)
       await Wallet.sendClaim(msg, attributes, true)
