@@ -20,7 +20,8 @@ const Wallet = require('akasha-id-wallet')
 # Wallet API
 
 When instantiating the wallet, you can pass an optional configuration parameter (as an object)
-that contains the `hubUrls`.
+that contains the list of [signalhub](https://github.com/mafintosh/signalhub) URLs (`hubUrls`),
+and whether or not to output debug messages to console.
 
 ```js
 const Wallet = require('akasha-id-wallet')
@@ -34,6 +35,13 @@ const wallet = new Wallet(config)
 // initialize
 await wallet.init()
 ```
+
+Here are some free and open signalhub servers! For serious applications though, please consider
+deploying your own instances.
+
+    * https://signalhub-jccqtwhdwc.now.sh
+    * https://signalhub-hzbibrznqa.now.sh
+
 
 ## Handling profiles
 
