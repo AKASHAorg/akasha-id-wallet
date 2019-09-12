@@ -171,7 +171,8 @@ The `request` contents will look similar to the object below.
 
 ```js
 {
-    appInfo: {name: "AKASHA.world", description: "The super cool AKASHA World app!", icon: "https://app.akasha.world/icon.png", url: "https://app.akasha.world"}
+    appInfo: {name: "AKASHA.world", description: "The super cool AKASHA World app!", icon: "https://app.akasha.world/icon.png", url: "https://app.akasha.world"},
+    attributes: ['name', 'email'],
     channel: "1ce120a6f8630283db7c434ce74541831b4106a2"
     key: "VCm7C1ci28M+8TFf2LA4PA=="
     nonce: 579482
@@ -179,7 +180,9 @@ The `request` contents will look similar to the object below.
 }
 ```
 
-The wallet app can now use the `appInfo` data to display a modal/page to the user, informing them about the app that is currently requesting access to the profile elements, as well as displaying a list of available attributes from the profile that can be disclosed to the client app.
+The wallet app can now use the `appInfo` data to display a modal/page to the user, informing them about the app that is currently requesting access to the profile elements. At the same time, it
+can also inform the user at to what attributes they should disclose specifically for this app,
+out of all the profile attributes they may have in their AKASHA.id profile.
 
 ```js
 ...
