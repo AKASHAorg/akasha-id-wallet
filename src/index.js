@@ -285,6 +285,34 @@ class Wallet {
   /* ------------- Requests API ------------- */
 
   /**
+   * Handler for the profile refresh operations
+   *
+   * @param {Object} data - The request data coming from the app
+   */
+  async handleRefresh (data) {
+    try {
+      const localData = await this.store.get(data.token)
+      if (!localData) {
+        // TODO: handle revoked apps
+        debug(`Cannot find a matching app for the token ${data.token}`)
+        return
+      }
+      const key = await WebCrypto.importKey(Buffer.from(localData.key, 'base64'))
+      const req = await WebCrypto.decrypt(key, data.msg, 'base64')
+      const claim = {
+        channel: req.channel,
+        token: data.token,
+        key: localData.key,
+        nonce: req.nonce
+      }
+      await this.sendClaim(claim, localData.attributes, true)
+      debug(`Sent updated claim!`)
+    } catch (e) {
+      debug(e)
+    }
+  }
+
+  /**
     * Listener for 'refresh' requests coming from registered apps
     *
     * @param {Function} handler - The handler function to trigger in case of a
@@ -298,6 +326,7 @@ class Wallet {
         data = JSON.parse(data)
         switch (data.request) {
           case 'refresh':
+            debug('Got refresh request:', data)
             this.handleRefresh(data)
             break
           default:
@@ -328,34 +357,6 @@ class Wallet {
       return parsed
     } catch (e) {
       throw new Error(e)
-    }
-  }
-
-  /**
-   * Handler for the profile refresh operations
-   *
-   * @param {Object} data - The request data coming from the app
-   */
-  async handleRefresh (data) {
-    try {
-      const localData = await this.store.get(data.token)
-      if (!localData) {
-        // TODO: handle revoked apps
-        return
-      }
-      const key = await WebCrypto.importKey(Buffer.from(localData.key, 'base64'))
-      const req = await WebCrypto.decrypt(key, data.msg, 'base64')
-      debug('Got refresh request:', req)
-      await this.sendClaim({
-        channel: req.channel,
-        token: data.token,
-        key: localData.key,
-        nonce: req.nonce
-      },
-      localData.attributes,
-      true)
-    } catch (e) {
-      debug(e)
     }
   }
 
