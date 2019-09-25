@@ -517,14 +517,12 @@ class Wallet {
       msg.claim = await this.prepareClaim(attributes)
       msg.token = token
       msg.refreshEncKey = refreshEncKey
+      // store claim
+      await this.addClaim(token, refreshEncKey, attributes)
     }
     const encryptedMsg = await WebCrypto.encrypt(key, msg, 'base64')
     // broadcast msg back to the app
     hub.broadcast(req.channel, JSON.stringify({ request: 'claim', msg: encryptedMsg }), async () => {
-      // save app settings if we allowed it
-      if (allowed) {
-        await this.addClaim(token, refreshEncKey, attributes)
-      }
       // cleanup
       this.cleanUp(hub)
     })
