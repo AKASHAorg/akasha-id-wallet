@@ -22,10 +22,18 @@ describe('AKASHA ID', function () {
 
   const config = {
     hubUrls: ['http://localhost:8888'],
-    walletUrl: 'http://localhost:3000'
+    walletUrl: 'http://localhost:3000',
+    debug: true
   }
-  const profileName = 'jane'
-  let profilePass = 'password1'
+
+  const attributes = {
+    name: true,
+    email: true,
+    address: false
+  }
+
+  const accountName = 'jane'
+  let accountPass = 'password1'
 
   const Client = new IdClient(appInfo, config)
   let Wallet
@@ -67,87 +75,87 @@ describe('AKASHA ID', function () {
     })
   })
 
-  context('Not logged into wallet', () => {
-    it('Should not list any profiles by default', () => {
-      const profiles = Wallet.publicProfiles()
-      chai.assert.isEmpty(profiles)
+  context('Not logged', () => {
+    it('Should not list any accounts by default', () => {
+      const accounts = Wallet.publicAccounts()
+      chai.assert.isEmpty(accounts)
     })
 
-    it('Should fail to create new profile without proper prameters', async () => {
+    it('Should fail to create new account without proper prameters', async () => {
       let err
       try {
         await Wallet.signup()
       } catch (error) {
         err = error
       }
-      chai.assert.equal(err.message, 'Both profile name and password are required')
+      chai.assert.equal(err.message, 'Both account name and password are required')
 
       try {
         await Wallet.signup('foo')
       } catch (error) {
         err = error
       }
-      chai.assert.equal(err.message, 'Both profile name and password are required')
+      chai.assert.equal(err.message, 'Both account name and password are required')
 
       try {
         await Wallet.signup(undefined, 'foo')
       } catch (error) {
         err = error
       }
-      chai.assert.equal(err.message, 'Both profile name and password are required')
+      chai.assert.equal(err.message, 'Both account name and password are required')
     })
 
-    it('Should fail to remove a profile', async () => {
+    it('Should fail to remove an account', async () => {
       let err
       try {
-        await Wallet.removeProfile('foo')
+        await Wallet.removeAccount('foo')
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to save a private profile', async () => {
+    it('Should fail to save a private account', async () => {
       let err
       try {
-        await Wallet.updateProfile({})
+        await Wallet.updateAccount({})
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to get a private profile', async () => {
+    it('Should fail to get a private account', async () => {
       let err
       try {
-        await Wallet.profile({})
+        await Wallet.account({})
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to export a private profile', async () => {
+    it('Should fail to export a private account', async () => {
       let err
       try {
-        await Wallet.exportProfile()
+        await Wallet.exportAccount()
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to update passphrase for a profile', async () => {
+    it('Should fail to update passphrase for a account', async () => {
       let err
       try {
-        await await Wallet.updatePassphrase(profilePass, 'foobar')
+        await await Wallet.updatePassphrase(accountPass, 'foobar')
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to list applications if no profile is selected', async () => {
+    it('Should fail to list applications if no account is selected', async () => {
       let err
       try {
         await Wallet.apps()
@@ -157,7 +165,7 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to register an application if no profile is selected', async () => {
+    it('Should fail to register an application if no account is selected', async () => {
       let err
       try {
         await Wallet.registerApp({})
@@ -167,7 +175,7 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to add an application if no profile is selected', async () => {
+    it('Should fail to add an application if no account is selected', async () => {
       let err
       try {
         await Wallet.addApp('foo', {})
@@ -177,7 +185,7 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to remove an application if no profile is selected', async () => {
+    it('Should fail to remove an application if no account is selected', async () => {
       let err
       try {
         await Wallet.removeApp('foo')
@@ -187,7 +195,7 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to add a claim if no profile is selected', async () => {
+    it('Should fail to add a claim if no account is selected', async () => {
       let err
       try {
         await Wallet.addClaim('foo', 'foo', {})
@@ -197,7 +205,7 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to get a claim if no profile is selected', async () => {
+    it('Should fail to get a claim if no account is selected', async () => {
       let err
       try {
         await Wallet.getClaim('foo', 'foo', {})
@@ -207,7 +215,7 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to prepare a claim if no profile is selected', async () => {
+    it('Should fail to prepare a claim if no account is selected', async () => {
       let err
       try {
         await Wallet.prepareClaim([])
@@ -217,7 +225,7 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to remove a claim if no profile is selected', async () => {
+    it('Should fail to remove a claim if no account is selected', async () => {
       let err
       try {
         await Wallet.removeClaim('foo', 'foo', {})
@@ -227,7 +235,7 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to send a claim if no profile is selected', async () => {
+    it('Should fail to send a claim if no account is selected', async () => {
       let err
       try {
         await Wallet.sendClaim({}, {}, true)
@@ -238,18 +246,18 @@ describe('AKASHA ID', function () {
     })
   })
 
-  context('Wallet profile API', () => {
-    it('Should successfully create new profile with proper parameters and log user in', async () => {
+  context('Wallet account API', () => {
+    it('Should successfully signup and log user in', async () => {
       let err
       let id
       try {
-        id = await Wallet.signup(profileName, profilePass)
+        id = await Wallet.signup(accountName, accountPass)
       } catch (error) {
         err = error
       }
       chai.assert.isUndefined(err)
 
-      const profiles = Wallet.publicProfiles()
+      const profiles = await Wallet.publicAccounts()
       chai.assert.equal(id, profiles[0].id)
       // give the hub and the leader election process time to set up
       await sleep(300)
@@ -257,81 +265,78 @@ describe('AKASHA ID', function () {
       chai.assert.isDefined(Wallet.hub)
     })
 
-    it('Should have created an AKASHA DID', () => {
-      chai.assert.equal(Wallet.currentDID().length, 43)
-      chai.assert.equal(Wallet.currentDID().substring(0, 11), 'did:akasha:')
-    })
-
-    it('Should list only one profile', () => {
-      const profiles = Wallet.publicProfiles()
+    it('Should list only one account', async () => {
+      const profiles = await Wallet.publicAccounts()
       chai.assert.equal(profiles.length, 1)
-      chai.assert.equal(profiles[0].name, profileName)
+      chai.assert.equal(profiles[0].name, accountName)
     })
 
-    it('Should log user out of a current profile', async () => {
+    it('Should log user out of a current account', async () => {
       await Wallet.logout()
-      chai.assert.isUndefined(Wallet.currentDID())
-    })
-
-    it('Should log user into an existing profile', async () => {
-      const profiles = Wallet.publicProfiles()
-      await Wallet.login(profiles[0].id, profilePass)
-
-      chai.assert.exists(Wallet.currentDID(), profiles[0].id)
-    })
-
-    it('Should fail to save a profile when given bad parameters', async () => {
       let err
       try {
-        await Wallet.updateProfile()
+        Wallet.isLoggedIn()
       } catch (error) {
         err = error
       }
-      chai.assert.equal(err.message, 'No profile data present')
+      chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should successfully set the profile', async () => {
-      chai.assert.isUndefined(await Wallet.profile())
-      const profile = {
-        name: 'foo bar',
-        familyName: 'bar',
-        givenName: 'foo',
-        email: 'foo@bar.org'
+    it('Should log user into an existing account', async () => {
+      const accounts = await Wallet.publicAccounts()
+      await Wallet.login(accounts[0].id, accountPass)
+
+      chai.assert.isTrue(Wallet.isLoggedIn())
+    })
+
+    it('Should fail to update an account when given bad parameters', async () => {
+      let err
+      try {
+        await Wallet.updateAccount()
+      } catch (error) {
+        err = error
       }
-      await Wallet.updateProfile(profile)
-      chai.assert.isDefined(await Wallet.profile())
+      chai.assert.equal(err.message, 'Missing attributes')
     })
 
-    it('Should successfully export the current profile', async () => {
-      const dump = await Wallet.exportProfile()
-      const publicProfile = Wallet.publicProfiles()[0]
-
-      chai.assert.equal(dump.id, publicProfile.id)
-      chai.assert.equal(dump.publicProfile.name, publicProfile.name)
+    it('Should successfully update the account data', async () => {
+      chai.assert.isUndefined(await Wallet.account())
+      const account = {
+        name: 'foo bar'
+      }
+      await Wallet.updateAccount(account)
+      chai.assert.isDefined(await Wallet.account())
     })
 
-    it('Should successfully import a profile using the same', async () => {
-      const dump = await Wallet.exportProfile()
+    it('Should successfully export the current account', async () => {
+      const dump = await Wallet.exportAccount()
+      const pub = await Wallet.publicAccounts()
 
-      let profile = await Wallet.profile()
-      const oldName = profile.name
-      profile.name = 'foo' // was 'foo bar'
-      await Wallet.updateProfile(profile)
-
-      await Wallet.importProfile(dump, profilePass)
-      profile = await Wallet.profile()
-      chai.assert.equal(profile.name, oldName)
+      chai.assert.equal(dump.id, pub[0].id)
+      chai.assert.equal(dump.publicAccount.name, pub[0].name)
     })
 
-    it('Should successfully import a profile using a different name', async () => {
+    it('Should successfully import a account using the same name', async () => {
+      const dump = await Wallet.exportAccount()
+      let account = await Wallet.account()
+      const oldName = account.name
+      account.name = 'foo' // was 'foo bar'
+      await Wallet.updateAccount(account)
+
+      await Wallet.importAccount(dump, accountPass)
+      account = await Wallet.account()
+      chai.assert.equal(account.name, oldName)
+    })
+
+    it('Should successfully import an account using a different name', async () => {
       const newName = 'joanne'
 
-      const dump = await Wallet.exportProfile()
+      const dump = await Wallet.exportAccount()
 
-      await Wallet.importProfile(dump, profilePass, newName)
+      await Wallet.importAccount(dump, accountPass, newName)
 
-      const publicProfile = Wallet.publicProfiles()[0]
-      chai.assert.equal(newName, publicProfile.name)
+      const pub = await Wallet.publicAccounts()
+      chai.assert.equal(newName, pub[0].name)
     })
 
     it('Should fail to update the passphrase that protects the encryption key when given bad parameters', async () => {
@@ -359,17 +364,17 @@ describe('AKASHA ID', function () {
     })
 
     it('Should update the passphrase that protects the encryption key', async () => {
-      await Wallet.updatePassphrase(profilePass, 'foobar')
+      await Wallet.updatePassphrase(accountPass, 'foobar')
       await Wallet.logout()
 
-      const profiles = Wallet.publicProfiles()
-      await Wallet.login(profiles[0].id, 'foobar')
-      chai.assert.exists(Wallet.currentDID(), profiles[0].id)
+      const accounts = await Wallet.publicAccounts()
+      await Wallet.login(accounts[0].id, 'foobar')
+      chai.assert.isTrue(Wallet.isLoggedIn())
       // update it for the future
-      profilePass = 'foobar'
+      accountPass = 'foobar'
     })
 
-    it('Should fail to remove a profile if no ID was provided', async () => {
+    it('Should fail to remove a account if no ID was provided', async () => {
       let err
       try {
         await Wallet.removeProfile()
@@ -379,19 +384,107 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'No profile id provided')
     })
 
-    it('Should remove an existing profile and log the user out', async () => {
-      await Wallet.removeProfile(Wallet.id)
-      const profiles = Wallet.publicProfiles()
+    it('Should remove an existing account and log the user out', async () => {
+      await Wallet.removeAccount(Wallet.id)
+      const accounts = await Wallet.publicAccounts()
 
-      chai.assert.isEmpty(profiles)
-      chai.assert.isUndefined(Wallet.currentDID())
+      chai.assert.isEmpty(accounts)
+      let err
+      try {
+        Wallet.isLoggedIn()
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Not logged in')
+    })
+  })
+
+  context('Wallet profile API', () => {
+    // first we create a valid profile
+    before(async () => {
+      await Wallet.signup(accountName, accountPass)
+    })
+
+    it('Should fail to add a profile when given bad parameters', async () => {
+      let err
+      try {
+        await Wallet.addProfile()
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Missing attributes')
+    })
+
+    it('Should successfully add a new profile', async () => {
+      chai.assert.isEmpty(await Wallet.profiles())
+      const profile = {
+        name: 'social'
+      }
+      await Wallet.addProfile(profile)
+      chai.assert.isNotEmpty(await Wallet.profiles())
+    })
+
+    it('Should fail to update a profile when given bad parameters', async () => {
+      let err
+      try {
+        await Wallet.updateProfile()
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Missing attributes')
+
+      try {
+        await Wallet.updateProfile('foo')
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Missing attributes')
+
+      try {
+        await Wallet.updateProfile(undefined, {})
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'Missing attributes')
+    })
+
+    it('Should successfully update a profile', async () => {
+      const newName = 'work'
+      let profiles = await Wallet.profiles()
+      let ids = Object.keys(profiles)
+
+      profiles[ids[0]].name = newName
+      await Wallet.updateProfile(ids[0], profiles[ids[0]])
+      profiles = await Wallet.profiles()
+      ids = Object.keys(profiles)
+      chai.assert.equal(profiles[ids[0]].name, newName)
+    })
+
+    it('Should fail to remove a profile when given bad parameters', async () => {
+      let err
+      try {
+        await Wallet.removeProfile()
+      } catch (error) {
+        err = error
+      }
+      chai.assert.equal(err.message, 'No profile id provided')
+    })
+
+    it('Should successfully remove a profile', async () => {
+      const profiles = await Wallet.profiles()
+      const ids = Object.keys(profiles)
+      await Wallet.removeProfile(ids[0])
+      chai.assert.isEmpty(await Wallet.profiles())
     })
   })
 
   context('Wallet app API', async () => {
     // first we create a valid profile
     before(async () => {
-      await Wallet.signup(profileName, profilePass)
+      const profile = {
+        name: 'social'
+      }
+      await Wallet.addProfile(profile)
     })
 
     it('Should fail to parse a bad registration link', async () => {
@@ -415,9 +508,9 @@ describe('AKASHA ID', function () {
       chai.assert.isTrue(parsed.nonce > 0)
     })
 
-    it('Should successfully return an empty list of apps', async () => {
-      const apps = await Wallet.apps()
-
+    it('Should successfully return an empty list of apps for a given profile', async () => {
+      const ids = Object.keys(await Wallet.profiles())
+      const apps = await Wallet.apps(ids[0])
       chai.assert.isEmpty(apps)
     })
 
@@ -447,8 +540,15 @@ describe('AKASHA ID', function () {
 
     it('Should successfully add a new app', async () => {
       let err
+      const req = {
+        token: 'foo',
+        appInfo: appInfo
+      }
+
+      const ids = Object.keys(await Wallet.profiles())
+
       try {
-        await Wallet.addApp('foo', appInfo)
+        await Wallet.addApp(req, ids[0], attributes)
       } catch (error) {
         err = error
       }
@@ -456,24 +556,31 @@ describe('AKASHA ID', function () {
     })
 
     it('Should successfully list the app', async () => {
-      const apps = await Wallet.apps()
+      const ids = Object.keys(await Wallet.profiles())
+      const apps = await Wallet.apps(ids[0])
 
-      chai.assert.isNotEmpty(apps)
-      chai.assert.deepEqual(apps['foo'], appInfo)
+      chai.assert.equal(apps['foo'].profile, ids[0])
+      chai.assert.deepEqual(apps['foo'].appInfo, appInfo)
+      chai.assert.deepEqual(apps['foo'].attributes, attributes)
     })
 
     it('Should successfully remove the app', async () => {
       await Wallet.removeApp('foo')
       const apps = await Wallet.apps()
-
       chai.assert.isEmpty(apps)
     })
   })
 
   context('Wallet claim API', async () => {
-    // first we create a valid profile
+    // Register the app before creating claims
     before(async () => {
-      await Wallet.signup(profileName, profilePass)
+      const req = {
+        token: 'foo',
+        appInfo: appInfo
+      }
+
+      const ids = Object.keys(await Wallet.profiles())
+      await Wallet.addApp(req, ids[0], attributes)
     })
 
     it('Should fail to add a new claim without proper parameters', async () => {
@@ -510,7 +617,7 @@ describe('AKASHA ID', function () {
     it('Should successfully add a claim for the current user', async () => {
       let err
       try {
-        await Wallet.addClaim('foo', 'bar', ['givenName', 'email'])
+        await Wallet.addClaim('foo', 'bar')
       } catch (error) {
         err = error
       }
@@ -520,7 +627,6 @@ describe('AKASHA ID', function () {
     it('Should successfully get a claim using the provided token', async () => {
       const claim = await Wallet.getClaim('foo')
 
-      chai.assert.deepEqual(claim.attributes, ['givenName', 'email'])
       chai.assert.equal(claim.key, 'bar')
     })
 
@@ -544,19 +650,23 @@ describe('AKASHA ID', function () {
     it('Should successfully prepare a claim using the provided attributes', async () => {
       const profile = {
         name: 'foo bar',
-        familyName: 'bar',
-        givenName: 'foo',
-        email: 'foo@bar.org'
+        email: 'foo@bar.org',
+        address: '1st Avenue'
       }
-      await Wallet.updateProfile(profile)
+      const ids = Object.keys(await Wallet.profiles())
+      await Wallet.updateProfile(ids[0], profile)
+      const apps = await Wallet.apps(ids[0])
+      const token = Object.keys(apps)[0]
+      const app = apps[token]
 
-      const claim = await Wallet.getClaim('foo')
-
-      const prepared = await Wallet.prepareClaim(claim.attributes)
+      const prepared = await Wallet.prepareClaim(token)
       const attributes = Object.keys(prepared.credentialSubject)
+
       // check if we have all the attributes and values
-      claim.attributes.forEach(attr => {
-        chai.assert.equal(profile[attr], prepared.credentialSubject[attr])
+      Object.keys(app.attributes).forEach(attr => {
+        if (app.attributes[attr]) {
+          chai.assert.equal(profile[attr], prepared.credentialSubject[attr])
+        }
       })
       // also check if DID is there
       chai.assert.include(attributes, 'id')
@@ -573,16 +683,7 @@ describe('AKASHA ID', function () {
   context('Client <-> Wallet e2e', () => {
     // first we create a valid profile
     before(async () => {
-      await Wallet.logout()
-      await Wallet.signup(profileName, profilePass)
-      const profile = {
-        name: 'foo bar',
-        familyName: 'bar',
-        givenName: 'foo',
-        email: 'foo@bar.org'
-      }
-      await Wallet.updateProfile(profile)
-      await sleep(300)
+      await Wallet.removeApp('foo')
     })
 
     let clientClaim
@@ -592,14 +693,16 @@ describe('AKASHA ID', function () {
 
       const request = Client.requestProfile()
       // give the client some time to setup listener
-      await sleep(100)
+      await sleep(50)
 
       const msg = await Wallet.registerApp(link.substring(config.walletUrl.length))
       chai.assert.isUndefined(msg.attributes)
 
       await Wallet.sendClaim(msg, [], false)
 
-      const apps = await Wallet.apps()
+      const profileId = Object.keys(await Wallet.profiles())[0]
+
+      const apps = await Wallet.apps(profileId)
       chai.assert.isEmpty(apps)
 
       return new Promise(resolve => {
@@ -612,13 +715,13 @@ describe('AKASHA ID', function () {
     })
 
     it('Should successfully register a new app from a request we allowed', async () => {
-      const attributes = ['name', 'email']
+      const attr = ['name', 'email']
 
       const link = await Client.registrationLink()
 
-      const request = Client.requestProfile(attributes)
+      const request = Client.requestProfile(attr)
       // give the client some time to setup listener
-      await sleep(100)
+      await sleep(50)
 
       const msg = await Wallet.registerApp(link.substring(config.walletUrl.length))
       chai.assert.exists(msg.token)
@@ -626,44 +729,48 @@ describe('AKASHA ID', function () {
       chai.assert.exists(msg.channel)
       chai.assert.equal(msg.nonce, Client.nonce)
       chai.assert.deepEqual(msg.appInfo, appInfo)
-      chai.assert.deepEqual(msg.attributes, attributes)
+      chai.assert.deepEqual(msg.attributes, attr)
 
       // save app
-      await Wallet.addApp(msg.token, msg.appInfo)
-      await Wallet.sendClaim(msg, attributes, true)
+      const profileId = Object.keys(await Wallet.profiles())[0]
+      await Wallet.addApp(msg, profileId, attributes)
+      await Wallet.sendClaim(msg, profileId, true)
 
-      const apps = await Wallet.apps()
-      chai.assert.deepEqual(apps[msg.token], appInfo)
-
-      const profile = await Wallet.profile()
+      const apps = await Wallet.apps(profileId)
+      chai.assert.deepEqual(apps[msg.token].appInfo, appInfo)
 
       return new Promise(resolve => {
-        request.then(response => {
+        request.then(async response => {
           chai.assert.isTrue(response.allowed)
-          chai.assert.equal(response.did, Wallet.currentDID())
+          chai.assert.equal(response.did, Wallet.did(profileId))
           chai.assert.equal(response.token, msg.token)
           chai.assert.isDefined(response.claim)
-          // check if we have all the attributes and values
-          attributes.forEach(attr => {
-            chai.assert.equal(profile[attr], response.claim.credentialSubject[attr])
-          })
           // save this client claim for refresh test
           clientClaim = response
+          await Wallet.logout()
+          await sleep(200)
           return resolve()
         })
       })
     })
 
     it('Should successfully refresh a claim', async () => {
-      const request = Client.refreshProfile(clientClaim)
+      const accounts = await Wallet.publicAccounts()
+      await Wallet.login(accounts[0].id, accountPass)
+      await sleep(500)
 
+      // const Client = new IdClient(appInfo, config)
+      console.log('\n\n\n__________\n\n\n')
+      const request = Client.refreshProfile(clientClaim)
+      console.log(Wallet.hub)
       // give the wallet some time to process the request
       await sleep(200)
 
       const claim = await Wallet.getClaim(clientClaim.token)
-
+      console.log(claim)
       return new Promise(resolve => {
-        request.then(async response => {
+        request.then(response => {
+          console.log(response)
           chai.assert.isTrue(response.allowed)
           chai.assert.equal(response.did, Wallet.currentDID())
           chai.assert.equal(response.token, clientClaim.token)

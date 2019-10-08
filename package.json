@@ -17,6 +17,7 @@
         "signalhub": "^4.9.0"
     },
     "devDependencies": {
+        "akasha-id-client": "git+https://github.com/AkashaProject/akasha-id-client",
         "babel": "^6.23.0",
         "chai": "^4.2.0",
         "concurrently": "^4.1.2",
@@ -24,8 +25,7 @@
         "mocha-headless-chrome": "^2.0.3",
         "standard": "^13.1.0",
         "webpack": "^4.39.2",
-        "webpack-cli": "^3.3.6",
-        "akasha-id-client": "git+https://github.com/AkashaProject/akasha-id-client"
+        "webpack-cli": "^3.3.6"
     },
     "author": "Andrei Sambra <andrei.sambra@akasha.world> (https://akasha.org/)"
 }
