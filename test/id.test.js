@@ -22,8 +22,7 @@ describe('AKASHA ID', function () {
 
   const config = {
     hubUrls: ['http://localhost:8888'],
-    walletUrl: 'http://localhost:3000',
-    debug: true
+    walletUrl: 'http://localhost:3000'
   }
 
   const attributes = {
@@ -742,13 +741,12 @@ describe('AKASHA ID', function () {
       return new Promise(resolve => {
         request.then(async response => {
           chai.assert.isTrue(response.allowed)
-          chai.assert.equal(response.did, Wallet.did(profileId))
+          chai.assert.equal(response.did, Wallet.did())
           chai.assert.equal(response.token, msg.token)
           chai.assert.isDefined(response.claim)
           // save this client claim for refresh test
           clientClaim = response
           await Wallet.logout()
-          await sleep(200)
           return resolve()
         })
       })
@@ -757,28 +755,21 @@ describe('AKASHA ID', function () {
     it('Should successfully refresh a claim', async () => {
       const accounts = await Wallet.publicAccounts()
       await Wallet.login(accounts[0].id, accountPass)
-      await sleep(500)
+      await sleep(200)
 
-      // const Client = new IdClient(appInfo, config)
-      console.log('\n\n\n__________\n\n\n')
       const request = Client.refreshProfile(clientClaim)
-      console.log(Wallet.hub)
       // give the wallet some time to process the request
       await sleep(200)
 
       const claim = await Wallet.getClaim(clientClaim.token)
-      console.log(claim)
+
       return new Promise(resolve => {
         request.then(response => {
-          console.log(response)
           chai.assert.isTrue(response.allowed)
-          chai.assert.equal(response.did, Wallet.currentDID())
+          chai.assert.equal(response.did, Wallet.did())
           chai.assert.equal(response.token, clientClaim.token)
           chai.assert.notEqual(response.refreshEncKey, clientClaim.refreshEncKey)
           chai.assert.equal(response.refreshEncKey, claim.key)
-          resolve()
-        }).then(err => {
-          console.log(err)
           resolve()
         })
       })

@@ -60,11 +60,11 @@ class Wallet {
   /**
    * Create an AKASHA DID based on a given identifier
    *
-   * @param {string} id - An identifier string
    * @returns {string} - The DID
    */
-  did (id) {
-    return `did:akasha:${id}`
+  did () {
+    this.isLoggedIn()
+    return `did:akasha:${this.id}`
   }
 
   /* ------------- Accounts API ------------- */
@@ -389,10 +389,13 @@ class Wallet {
         key: localData.key,
         nonce: req.nonce
       }
-      const appData = await Wallet.appInfo(data.token)
-
-      this.sendClaim(claim, appData.profile, true)
-      debug(`Sent updated claim!`)
+      try {
+        const appData = await this.appInfo(data.token)
+        await this.sendClaim(claim, appData.profile, true)
+        debug(`Sent updated claim!`)
+      } catch (e) {
+        console.log(e)
+      }
     } catch (e) {
       debug(e)
     }
@@ -407,10 +410,8 @@ class Wallet {
   async listen (refreshHandler) {
     // init query hub
     this.hub = initHub(this.hubUrls)
-    debug('Listening for refresh requests for', this.id)
     try {
       this.hub.subscribe(this.id).on('data', async (data) => {
-        debug('Got data:', data)
         data = JSON.parse(data)
         switch (data.request) {
           case 'refresh':
@@ -626,7 +627,7 @@ class Wallet {
       nonce: req.nonce
     }
     if (allowed) {
-      msg.did = this.did(profileId)
+      msg.did = this.did()
       msg.claim = await this.prepareClaim(token)
       msg.token = token
       msg.refreshEncKey = refreshEncKey
@@ -666,7 +667,7 @@ class Wallet {
       }
     })
     // also add the did
-    const did = this.did(app.profile)
+    const did = this.did()
     credential.id = did
     // return the formatted VC
     return {
