@@ -83,7 +83,8 @@ class Wallet {
     // generating a new ID
     this.id = WebCrypto.genId()
     // add this user to the local list of available accounts
-    await this.updateAccountsList(this.id, {
+    await this.updateAccountsList({
+      id: this.id,
       name
     })
     // also log user in
@@ -178,20 +179,23 @@ class Wallet {
   /**
     * Update the public list of accounts
     *
-    * @param {string} userId - The user identifier
-    * @param {Object} data - The user's (public) account info that is used when
+    * @param {Object} account - The user's (public) account info that is used when
     * building the list
     * @returns {Promise} - The promise that resolves upon successful completion of the
     * data store operation
     */
-  async updateAccountsList (userId, data) {
-    if (!data.name) {
-      throw new Error('Missing name from account')
+  async updateAccountsList (account) {
+    if (!account.id || !account.name) {
+      throw new Error('Missing parameters from public account data')
     }
     try {
-      this.accounts[userId] = {
-        name: data.name,
-        picture: data.picture || undefined
+      this.accounts = await SecureStore._idb.get('accounts')
+      if (!this.accounts) {
+        this.accounts = {}
+      }
+      this.accounts[account.id] = {
+        name: account.name,
+        picture: account.picture || undefined
       }
       // Use the raw idb object to set the accounts in the default (public) store
       await SecureStore._idb.set('accounts', this.accounts)
@@ -201,7 +205,7 @@ class Wallet {
   }
 
   /**
-   * Update account information
+   * Update private account information
    *
    * @param {Object} data - The account data to be stored
    * @returns {Promise} - A promise that resolves once the operation has completed
@@ -219,23 +223,20 @@ class Wallet {
   }
 
   /**
-   * Remove a local user account
+   * Remove the current user account
    *
    * @param {string} The user's account ID
    */
-  async removeAccount (id) {
+  async removeAccount () {
     this.isLoggedIn()
-    if (!id) {
-      throw new Error('No account id provided')
-    }
     try {
-      delete this.accounts[id]
+      delete this.accounts[this.id]
       await SecureStore._idb.set('accounts', this.accounts)
     } catch (e) {
       throw new Error(e)
     }
     await this.store.clear()
-    // TODO: remove the db and store (needs upstream implementation in idbkeyval)
+    // TODO: remove the empty db and store (needs upstream implementation in idbkeyval)
     await this.logout()
   }
 
@@ -287,8 +288,10 @@ class Wallet {
     if (name) {
       publicAccount.name = name
     }
+    // make sure we have the id in the account info
+    publicAccount.id = data.id
 
-    return this.updateAccountsList(data.id, publicAccount)
+    return this.updateAccountsList(publicAccount)
   }
 
   /* ------------- Profiles API ------------- */
@@ -300,7 +303,8 @@ class Wallet {
    * @returns {Object} - An object containing all the profiles and their data
    */
   async profile (id) {
-    const profiles = await this.profiles()
+    this.isLoggedIn()
+    const profiles = await this.store.get('profiles')
     return profiles[id]
   }
 
@@ -311,7 +315,17 @@ class Wallet {
    */
   async profiles () {
     this.isLoggedIn()
-    return await this.store.get('profiles') || {}
+    const profiles = await this.store.get('profiles') || {}
+
+    const ids = Object.keys(profiles)
+    if (ids.length === 0) {
+      return []
+    }
+    const list = []
+    ids.forEach(id => {
+      list.push(profiles[id])
+    })
+    return list
   }
 
   /**
@@ -321,8 +335,33 @@ class Wallet {
    * @returns {Promise} - A promise that resolves once the operation has completed
    */
   async addProfile (profile) {
-    const id = WebCrypto.genId()
-    return this.updateProfile(id, profile)
+    this.isLoggedIn()
+    if (!profile || !profile.profileName) {
+      throw new Error('Missing attributes')
+    }
+    // first we generate a new ID for the profile
+    profile.id = WebCrypto.genId()
+    return this.updateProfile(profile)
+  }
+
+  /**
+   * Update profile information
+   *
+   * @param {Object} profile - The profile data to be stored
+   * @returns {Promise} - A promise that resolves once the operation has completed
+   */
+  async updateProfile (data) {
+    this.isLoggedIn()
+    if (!data || !data.id || !data.profileName) {
+      throw new Error('Missing attributes')
+    }
+    try {
+      const profiles = await this.store.get('profiles') || {}
+      profiles[data.id] = data
+      return this.store.set('profiles', profiles)
+    } catch (e) {
+      throw new Error(e.message)
+    }
   }
 
   /**
@@ -337,32 +376,11 @@ class Wallet {
       throw new Error('No profile id provided')
     }
     try {
-      const profiles = await this.profiles()
+      const profiles = await this.store.get('profiles')
       delete profiles[id]
       return this.store.set('profiles', profiles)
     } catch (e) {
       throw new Error(e)
-    }
-  }
-
-  /**
-   * Update profile information
-   *
-   * @param {string} id - The profile identifier
-   * @param {Object} profile - The profile data to be stored
-   * @returns {Promise} - A promise that resolves once the operation has completed
-   */
-  async updateProfile (id, data) {
-    this.isLoggedIn()
-    if (!id || !data) {
-      throw new Error('Missing attributes')
-    }
-    try {
-      const profiles = await this.profiles() || {}
-      profiles[id] = data
-      return this.store.set('profiles', profiles)
-    } catch (e) {
-      throw new Error(e.message)
     }
   }
 
@@ -390,8 +408,7 @@ class Wallet {
         nonce: req.nonce
       }
       try {
-        const appData = await this.appInfo(data.token)
-        await this.sendClaim(claim, appData.profile, true)
+        await this.sendClaim(claim, true)
         debug(`Sent updated claim!`)
       } catch (e) {
         console.log(e)
@@ -515,12 +532,13 @@ class Wallet {
     } catch (e) {
       throw new Error(e)
     }
-    const list = {}
+    const list = []
     const ids = Object.keys(apps)
 
     const matching = ids.filter(id => { return apps[id].profile === profileId })
     matching.forEach(id => {
-      list[id] = apps[id]
+      apps[id].id = id
+      list.push(apps[id])
     })
     return list
   }
@@ -607,7 +625,7 @@ class Wallet {
     * @returns {Promise<Object>} - The data used for the claim once it has been sent,
     * to be stored by the wallet app
     */
-  async sendClaim (req, profileId, allowed) {
+  async sendClaim (req, allowed) {
     this.isLoggedIn()
     // init hub connection
     const hub = initHub(this.hubUrls)
@@ -652,31 +670,35 @@ class Wallet {
    */
   async prepareClaim (token) {
     this.isLoggedIn()
-    // get app details for this token
-    const app = await this.appInfo(token)
+    try {
+      // get app details for this token
+      const app = await this.appInfo(token)
 
-    if (!app.attributes || app.attributes.length === 0) {
-      throw new Error('Missing attributes when preparing claim')
-    }
-    const credential = {}
-    const profile = await this.profile(app.profile)
-
-    Object.keys(app.attributes).forEach(attr => {
-      if (app.attributes[attr]) {
-        credential[attr] = profile[attr]
+      if (!app.attributes || app.attributes.length === 0) {
+        throw new Error('Missing attributes when preparing claim')
       }
-    })
-    // also add the did
-    const did = this.did()
-    credential.id = did
-    // return the formatted VC
-    return {
-      '@context': ['https://www.w3.org/2018/credentials/v1', 'https://schema.org/'],
-      type: ['VerifiableCredential', 'IdentityCredential'],
-      issuer: did,
-      issuanceDate: new Date().toISOString(),
-      credentialSubject: credential,
-      proof: {}
+      const credential = {}
+      const profile = await this.profile(app.profile)
+
+      Object.keys(app.attributes).forEach(attr => {
+        if (app.attributes[attr]) {
+          credential[attr] = profile[attr]
+        }
+      })
+      // also add the did
+      const did = this.did()
+      credential.id = did
+      // return the formatted VC
+      return {
+        '@context': ['https://www.w3.org/2018/credentials/v1', 'https://schema.org/'],
+        type: ['VerifiableCredential', 'IdentityCredential'],
+        issuer: did,
+        issuanceDate: new Date().toISOString(),
+        credentialSubject: credential,
+        proof: {}
+      }
+    } catch (e) {
+      throw new Error(e.message)
     }
   }
 
