@@ -1,6 +1,6 @@
 # akasha-id-wallet
 [DID](https://w3c-ccg.github.io/did-spec/) wallet library for AKASHA.id, which handles requests
-for the user's profile attributes. It is meant to be used by the AKASHA.id application to
+for a user's persona attributes. It is meant to be used by the AKASHA.id application to
 exchange profile attributes with 3rd party applications.
 
 ## Install
@@ -155,50 +155,50 @@ await wallet.importAccount(dump, pass, name)
 await Wallet.updatePassphrase(oldPass, newPass)
 ```
 
-## Handling profiles (or personas) for each account
+## Handling personas for each account
 
-The wallet allows an account to have multiple profiles or "personas", perhaps describing us in different ways.
+The wallet allows an account to have multiple personas, describing us in different ways.
 
-### Add a new profile
+### Add a new persona
 
-When creating a new profile, it is **mandatory** to at least provide the `profileName` attribute.
+When creating a new persona, it is **mandatory** to at least provide the `personaName` attribute.
 
 ```js
-const profile = {
-    profileName: 'social'
+const persona = {
+    personaName: 'social'
 }
-await Wallet.addProfile(profile)
+await Wallet.addPersona(persona)
 ```
 
-### Get the list of profiles for the current account
+### Get the list of personas for the current account
 
-Returns an array of objects contaning profile information.
+Returns an array of objects contaning persona information.
 
 ```js
-const list = await Wallet.profiles()
-// console.log(list) -> [ { profileName: 'social', id: '80a60dd67812d3169fc6d852d90e80c3' } ]
+const list = await Wallet.personas()
+// console.log(list) -> [ { personaName: 'social', id: '80a60dd67812d3169fc6d852d90e80c3' } ]
 
 ```
 
-### Get the data for a given profile profile ID
+### Get the data for a given persona ID
 
 ```js
-const profile = await Wallet.profile(profileID)
+const persona = await Wallet.persona(personaID)
 ```
 
-### Update profile information for a given profile ID
+### Update persona information for a given persona ID
 
 ```js
-const profileData = await Wallet.profile(profileID)
-profileData.profileName = 'work' // used to be "social"
+const data = await Wallet.persona(personaID)
+data.personaName = 'work' // used to be "social"
 }
-await wallet.updateProfile(profileData)
+await wallet.updatePersona(data)
 ```
 
-### Remove a specific profile based on the ID of that profile
+### Remove a specific persona based on the ID of that persona
 
 ```js
-await Wallet.removeProfile(profileID)
+await Wallet.removePersona(personaID)
 ```
 
 ## Handling new apps
@@ -229,10 +229,10 @@ The `request` contents will look similar to the object below.
 }
 ```
 
-The wallet app can now use the `appInfo` data to display a modal/page to the user, informing them about the app that is currently requesting access to the profile elements. At the same time, it
+The wallet app can now use the `appInfo` data to display a modal/page to the user, informing them about the app that is currently requesting access to the persona elements. At the same time, it
 can also inform the user at to what attributes they should disclose specifically for this app --
-e.g. `attributes: ['name', 'email']` above -- out of all the profile attributes they may have in
-their AKASHA.id profile.
+e.g. `attributes: ['name', 'email']` above -- out of all the persona attributes they may have in
+their AKASHA.id persona.
 
 ```js
 ...
@@ -251,8 +251,8 @@ const attributes = {
 ...
 
 // add the app to the user's list of allowed apps
-// the profileID must also be specified
-await wallet.addApp(request, profileID, attributes)
+// the personaID must also be specified
+await wallet.addApp(request, personaID, attributes)
 
 // accept the request and send the claim
 await wallet.sendClaim(request, true) 
@@ -265,14 +265,14 @@ not have to save the app to the list before sending the claim.
 await wallet.sendClaim(request, false)
 ```
 
-### List all apps for a given profile ID
+### List all apps for a given persona ID
 
 Returns an array of app objects.
 
 ```js
-const apps = await wallet.apps(profileID)
+const apps = await wallet.apps(personaID)
 
-// console.log(apps) -> [ { id: "4962391a0dbf2abee7e0ea4d07814aa16cc2cefc", profile: "80a60dd67812d3169fc6d852d90e80c3", appInfo: { name: "AKASHA.world", description: "The super cool AKASHA World app!", icon: "https://app.akasha.world/icon.png", url: "https://app.akasha.world" }, attributes: { name: true, email: true, address: false } } ]
+// console.log(apps) -> [ { id: "4962391a0dbf2abee7e0ea4d07814aa16cc2cefc", persona: "80a60dd67812d3169fc6d852d90e80c3", appInfo: { name: "AKASHA.world", description: "The super cool AKASHA World app!", icon: "https://app.akasha.world/icon.png", url: "https://app.akasha.world" }, attributes: { name: true, email: true, address: false } } ]
 
 ```
 
