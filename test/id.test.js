@@ -517,6 +517,25 @@ describe('AKASHA ID', function () {
       await Wallet.removePersona(personas[0].id)
       chai.assert.isEmpty(await Wallet.personas())
     })
+
+    it('Should successfully remove a persona and its attached app', async () => {
+      const req = {
+        token: 'foo',
+        appInfo: appInfo
+      }
+      const persona = {
+        personaName: 'social'
+      }
+      await Wallet.addPersona(persona)
+      const personas = await Wallet.personas()
+
+      const id = personas[0].id
+      await Wallet.addApp(req, id, attributes)
+      // remove
+      await Wallet.removePersona(id)
+      chai.assert.isEmpty(await Wallet.personas())
+      chai.assert.isEmpty(await Wallet.apps())
+    })
   })
 
   context('Wallet app API', async () => {

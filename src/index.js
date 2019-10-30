@@ -376,6 +376,12 @@ class Wallet {
       throw new Error('No persona id provided')
     }
     try {
+      // remove apps for this persona
+      const apps = await this.apps(id)
+      apps.forEach(async app => {
+        await this.removeApp(app.id)
+      })
+      // remove persona
       const personas = await this.store.get('personas')
       delete personas[id]
       return this.store.set('personas', personas)
