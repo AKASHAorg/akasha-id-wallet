@@ -294,91 +294,91 @@ class Wallet {
     return this.updateAccountsList(publicAccount)
   }
 
-  /* ------------- Profiles API ------------- */
+  /* ------------- Personas API ------------- */
 
   /**
-   * Get the data for a given profile
+   * Get the data for a given persona
    *
-   * @param {string} id - The profile id to lookup
-   * @returns {Object} - An object containing all the profiles and their data
+   * @param {string} id - The persona id to lookup
+   * @returns {Object} - An object containing all the personas and their data
    */
-  async profile (id) {
+  async persona (id) {
     this.isLoggedIn()
-    const profiles = await this.store.get('profiles')
-    return profiles[id]
+    const personas = await this.store.get('personas')
+    return personas[id]
   }
 
   /**
-   * Get the list of profiles for the current account
+   * Get the list of personas for the current account
    *
-   * @returns {Object} - An object containing all the profiles and their data
+   * @returns {Object} - An object containing all the personas and their data
    */
-  async profiles () {
+  async personas () {
     this.isLoggedIn()
-    const profiles = await this.store.get('profiles') || {}
+    const personas = await this.store.get('personas') || {}
 
-    const ids = Object.keys(profiles)
+    const ids = Object.keys(personas)
     if (ids.length === 0) {
       return []
     }
     const list = []
     ids.forEach(id => {
-      list.push(profiles[id])
+      list.push(personas[id])
     })
     return list
   }
 
   /**
-   * Add a new profile
+   * Add a new persona
    *
-   * @param {Object} profile - The profile data to be stored
+   * @param {Object} persona - The persona data to be stored
    * @returns {Promise} - A promise that resolves once the operation has completed
    */
-  async addProfile (profile) {
+  async addPersona (persona) {
     this.isLoggedIn()
-    if (!profile || !profile.profileName) {
+    if (!persona || !persona.personaName) {
       throw new Error('Missing attributes')
     }
-    // first we generate a new ID for the profile
-    profile.id = WebCrypto.genId()
-    return this.updateProfile(profile)
+    // first we generate a new ID for the persona
+    persona.id = WebCrypto.genId()
+    return this.updatePersona(persona)
   }
 
   /**
-   * Update profile information
+   * Update persona information
    *
-   * @param {Object} profile - The profile data to be stored
+   * @param {Object} persona - The persona data to be stored
    * @returns {Promise} - A promise that resolves once the operation has completed
    */
-  async updateProfile (data) {
+  async updatePersona (data) {
     this.isLoggedIn()
-    if (!data || !data.id || !data.profileName) {
+    if (!data || !data.id || !data.personaName) {
       throw new Error('Missing attributes')
     }
     try {
-      const profiles = await this.store.get('profiles') || {}
-      profiles[data.id] = data
-      return this.store.set('profiles', profiles)
+      const personas = await this.store.get('personas') || {}
+      personas[data.id] = data
+      return this.store.set('personas', personas)
     } catch (e) {
       throw new Error(e.message)
     }
   }
 
   /**
-   * Remove a specific profile
+   * Remove a specific persona
    *
-   * @param {string} id - The profile id to remove
+   * @param {string} id - The persona id to remove
    * @returns {Promise} - A promise that resolves once the operation has completed
    */
-  async removeProfile (id) {
+  async removePersona (id) {
     this.isLoggedIn()
     if (!id) {
-      throw new Error('No profile id provided')
+      throw new Error('No persona id provided')
     }
     try {
-      const profiles = await this.store.get('profiles')
-      delete profiles[id]
-      return this.store.set('profiles', profiles)
+      const personas = await this.store.get('personas')
+      delete personas[id]
+      return this.store.set('personas', personas)
     } catch (e) {
       throw new Error(e)
     }
@@ -472,14 +472,14 @@ class Wallet {
    * Add an app to the local list of allowed apps
    *
    * @param {Object} req - The request coming from the client app
-   * @param {string} profileId - The profile id used for this app
+   * @param {string} personaId - The persona id used for this app
    * @returns {Promise} - The promise that resolves upon successful completion of the
    * data store operation
    */
-  async addApp (req, profileId, attributes) {
+  async addApp (req, personaId, attributes) {
     this.isLoggedIn()
     // TODO: validate appInfo schema before storing
-    if (!req || !req.token || !req.appInfo || !profileId || !attributes) {
+    if (!req || !req.token || !req.appInfo || !personaId || !attributes) {
       throw new Error('Missing parameter when adding app')
     }
     const exists = await this.store.get(req.token)
@@ -487,7 +487,7 @@ class Wallet {
       try {
         const apps = await this.store.get('apps') || {}
         apps[req.token] = {
-          profile: profileId,
+          persona: personaId,
           appInfo: req.appInfo,
           attributes
         }
@@ -522,9 +522,9 @@ class Wallet {
   }
 
   /**
-   * Return the list all apps currently allowed for a given profile
+   * Return the list all apps currently allowed for a given persona
    */
-  async apps (profileId) {
+  async apps (personaId) {
     this.isLoggedIn()
     let apps
     try {
@@ -535,7 +535,7 @@ class Wallet {
     const list = []
     const ids = Object.keys(apps)
 
-    const matching = ids.filter(id => { return apps[id].profile === profileId })
+    const matching = ids.filter(id => { return apps[id].persona === personaId })
     matching.forEach(id => {
       apps[id].id = id
       list.push(apps[id])
@@ -617,10 +617,10 @@ class Wallet {
   }
 
   /**
-    * Send a claim with profile attributes
+    * Send a claim with persona attributes
     *
     * @param {Object} req - The request coming from the client app
-    * @param {Object} attributes - An object containing profile attributes
+    * @param {Object} attributes - An object containing persona attributes
     * @param {string} [mode] - The mode of the key to import (default 'AES-GCM')
     * @returns {Promise<Object>} - The data used for the claim once it has been sent,
     * to be stored by the wallet app
@@ -678,11 +678,11 @@ class Wallet {
         throw new Error('Missing attributes when preparing claim')
       }
       const credential = {}
-      const profile = await this.profile(app.profile)
+      const persona = await this.persona(app.persona)
 
       Object.keys(app.attributes).forEach(attr => {
         if (app.attributes[attr]) {
-          credential[attr] = profile[attr]
+          credential[attr] = persona[attr]
         }
       })
       // also add the did
@@ -707,7 +707,7 @@ class Wallet {
    *
    * @param {string} token The token identifying the app
    * @param {string} key The encryption key used for the next request
-   * @param {Object} attributes The profile attributes shared with the app
+   * @param {Object} attributes The persona attributes shared with the app
    * @returns {Promise} - The promise that resolves upon successful completion of the
    * data store operation
    */

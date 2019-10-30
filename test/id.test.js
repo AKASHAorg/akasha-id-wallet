@@ -164,30 +164,30 @@ describe('AKASHA ID', function () {
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to add a new profile', async () => {
+    it('Should fail to add a new persona', async () => {
       let err
       try {
-        await Wallet.addProfile({})
+        await Wallet.addPersona({})
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to update a profile', async () => {
+    it('Should fail to update a persona', async () => {
       let err
       try {
-        await Wallet.updateProfile('foo', {})
+        await Wallet.updatePersona('foo', {})
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Not logged in')
     })
 
-    it('Should fail to remove a profile', async () => {
+    it('Should fail to remove a persona', async () => {
       let err
       try {
-        await Wallet.removeProfile('foo')
+        await Wallet.removePersona('foo')
       } catch (error) {
         err = error
       }
@@ -437,95 +437,95 @@ describe('AKASHA ID', function () {
     })
   })
 
-  context('Wallet profile API', () => {
-    // first we create a valid profile
+  context('Wallet persona API', () => {
+    // first we create a valid persona
     before(async () => {
       await Wallet.signup(accountName, accountPass)
     })
 
-    it('Should fail to add a profile when given bad parameters', async () => {
+    it('Should fail to add a persona when given bad parameters', async () => {
       let err
       try {
-        await Wallet.addProfile()
+        await Wallet.addPersona()
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Missing attributes')
     })
 
-    it('Should successfully add a new profile', async () => {
-      chai.assert.isEmpty(await Wallet.profiles())
-      const profile = {
-        profileName: 'social'
+    it('Should successfully add a new persona', async () => {
+      chai.assert.isEmpty(await Wallet.personas())
+      const persona = {
+        personaName: 'social'
       }
-      await Wallet.addProfile(profile)
-      chai.assert.isNotEmpty(await Wallet.profiles())
+      await Wallet.addPersona(persona)
+      chai.assert.isNotEmpty(await Wallet.personas())
     })
 
-    it('Should successfully list all the profiles for the account', async () => {
-      const list = await Wallet.profiles()
+    it('Should successfully list all the personas for the account', async () => {
+      const list = await Wallet.personas()
       chai.assert.isNotEmpty(list)
-      chai.assert.equal(list[0].profileName, 'social')
+      chai.assert.equal(list[0].personaName, 'social')
     })
 
-    it('Should fail to update a profile when given bad parameters', async () => {
+    it('Should fail to update a persona when given bad parameters', async () => {
       let err
       try {
-        await Wallet.updateProfile()
+        await Wallet.updatePersona()
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Missing attributes')
 
       try {
-        await Wallet.updateProfile('foo')
+        await Wallet.updatePersona('foo')
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Missing attributes')
 
       try {
-        await Wallet.updateProfile(undefined, {})
+        await Wallet.updatePersona(undefined, {})
       } catch (error) {
         err = error
       }
       chai.assert.equal(err.message, 'Missing attributes')
     })
 
-    it('Should successfully update a profile', async () => {
+    it('Should successfully update a persona', async () => {
       const newName = 'work'
-      let profiles = await Wallet.profiles()
+      let personas = await Wallet.personas()
 
-      profiles[0].profileName = newName
-      await Wallet.updateProfile(profiles[0])
-      profiles = await Wallet.profiles()
-      chai.assert.equal(profiles[0].profileName, newName)
+      personas[0].personaName = newName
+      await Wallet.updatePersona(personas[0])
+      personas = await Wallet.personas()
+      chai.assert.equal(personas[0].personaName, newName)
     })
 
-    it('Should fail to remove a profile when given bad parameters', async () => {
+    it('Should fail to remove a persona when given bad parameters', async () => {
       let err
       try {
-        await Wallet.removeProfile()
+        await Wallet.removePersona()
       } catch (error) {
         err = error
       }
-      chai.assert.equal(err.message, 'No profile id provided')
+      chai.assert.equal(err.message, 'No persona id provided')
     })
 
-    it('Should successfully remove a profile', async () => {
-      const profiles = await Wallet.profiles()
-      await Wallet.removeProfile(profiles[0].id)
-      chai.assert.isEmpty(await Wallet.profiles())
+    it('Should successfully remove a persona', async () => {
+      const personas = await Wallet.personas()
+      await Wallet.removePersona(personas[0].id)
+      chai.assert.isEmpty(await Wallet.personas())
     })
   })
 
   context('Wallet app API', async () => {
-    // first we create a valid profile
+    // first we create a valid persona
     before(async () => {
-      const profile = {
-        profileName: 'social'
+      const persona = {
+        personaName: 'social'
       }
-      await Wallet.addProfile(profile)
+      await Wallet.addPersona(persona)
     })
 
     it('Should fail to parse a bad registration link', async () => {
@@ -549,9 +549,9 @@ describe('AKASHA ID', function () {
       chai.assert.isTrue(parsed.nonce > 0)
     })
 
-    it('Should successfully return an empty list of apps for a given profile', async () => {
-      const profiles = await Wallet.profiles()
-      const apps = await Wallet.apps(profiles[0].id)
+    it('Should successfully return an empty list of apps for a given persona', async () => {
+      const personas = await Wallet.personas()
+      const apps = await Wallet.apps(personas[0].id)
       chai.assert.isEmpty(apps)
     })
 
@@ -586,8 +586,8 @@ describe('AKASHA ID', function () {
         appInfo: appInfo
       }
 
-      const profiles = await Wallet.profiles()
-      const id = profiles[0].id
+      const personas = await Wallet.personas()
+      const id = personas[0].id
       try {
         await Wallet.addApp(req, id, attributes)
       } catch (error) {
@@ -597,12 +597,12 @@ describe('AKASHA ID', function () {
     })
 
     it('Should successfully list the app', async () => {
-      const profiles = await Wallet.profiles()
-      const id = profiles[0].id
+      const personas = await Wallet.personas()
+      const id = personas[0].id
       const apps = await Wallet.apps(id)
 
       chai.assert.equal(apps[0].id, 'foo')
-      chai.assert.equal(apps[0].profile, id)
+      chai.assert.equal(apps[0].persona, id)
       chai.assert.deepEqual(apps[0].appInfo, appInfo)
       chai.assert.deepEqual(apps[0].attributes, attributes)
     })
@@ -622,8 +622,8 @@ describe('AKASHA ID', function () {
         appInfo: appInfo
       }
 
-      const profiles = await Wallet.profiles()
-      const id = profiles[0].id
+      const personas = await Wallet.personas()
+      const id = personas[0].id
       await Wallet.addApp(req, id, attributes)
     })
 
@@ -692,13 +692,13 @@ describe('AKASHA ID', function () {
     })
 
     it('Should successfully prepare a claim using the provided attributes', async () => {
-      const profiles = await Wallet.profiles()
-      profiles[0].name = 'foo bar'
-      profiles[0].email = 'foo@bar.org'
-      profiles[0].address = '1st Avenue'
+      const personas = await Wallet.personas()
+      personas[0].name = 'foo bar'
+      personas[0].email = 'foo@bar.org'
+      personas[0].address = '1st Avenue'
 
-      await Wallet.updateProfile(profiles[0])
-      const apps = await Wallet.apps(profiles[0].id)
+      await Wallet.updatePersona(personas[0])
+      const apps = await Wallet.apps(personas[0].id)
       const app = apps[0]
 
       let prepared
@@ -711,7 +711,7 @@ describe('AKASHA ID', function () {
       // check if we have all the attributes and values
       Object.keys(app.attributes).forEach(attr => {
         if (app.attributes[attr]) {
-          chai.assert.equal(profiles[0][attr], prepared.credentialSubject[attr])
+          chai.assert.equal(personas[0][attr], prepared.credentialSubject[attr])
         }
       })
       // also check if DID is there
@@ -727,7 +727,7 @@ describe('AKASHA ID', function () {
   })
 
   context('Client <-> Wallet e2e', () => {
-    // first we create a valid profile
+    // first we create a valid persona
     before(async () => {
       await Wallet.removeApp('foo')
     })
@@ -746,8 +746,8 @@ describe('AKASHA ID', function () {
 
       await Wallet.sendClaim(msg, false)
 
-      const profiles = await Wallet.profiles()
-      const id = profiles[0].id
+      const personas = await Wallet.personas()
+      const id = personas[0].id
 
       const apps = await Wallet.apps(id)
       chai.assert.isEmpty(apps)
@@ -779,8 +779,8 @@ describe('AKASHA ID', function () {
       chai.assert.deepEqual(msg.attributes, attr)
 
       // save app
-      const profiles = await Wallet.profiles()
-      const id = profiles[0].id
+      const personas = await Wallet.personas()
+      const id = personas[0].id
       await Wallet.addApp(msg, id, attributes)
       await Wallet.sendClaim(msg, true)
 
