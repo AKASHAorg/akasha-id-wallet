@@ -44,36 +44,47 @@ class Wallet {
   }
 
   /**
-   * Initialize the Wallet by loading all the profile IDs
+   * Initialize the Wallet by loading all the account IDs
    */
   async init () {
     try {
-      this.profiles = await SecureStore._idb.get('profiles')
-      if (!this.profiles) {
-        this.profiles = {}
+      this.accounts = await SecureStore._idb.get('accounts')
+      if (!this.accounts) {
+        this.accounts = {}
       }
     } catch (e) {
       throw new Error(e)
     }
   }
 
-  /* ------------- User API ------------- */
+  /**
+   * Create an AKASHA DID based on a given identifier
+   *
+   * @returns {string} - The DID
+   */
+  did () {
+    this.isLoggedIn()
+    return `did:akasha:${this.id}`
+  }
+
+  /* ------------- Accounts API ------------- */
   /**
     * Sign up a user
     *
-    * @param {string} name - The profile name
+    * @param {string} name - The account name
     * @param {string} passphrase - The user's passphrase
-    * @returns {string} id - The id specific to the new profile
+    * @returns {string} id - The id specific to the new account
     */
   async signup (name, passphrase) {
     if (!name || !passphrase) {
-      throw new Error('Both profile name and password are required')
+      throw new Error('Both account name and password are required')
     }
     // TODO: should use key derivation for future proof of ownership when
     // generating a new ID
     this.id = WebCrypto.genId()
     // add this user to the local list of available accounts
-    await this.updateProfileList(this.id, {
+    await this.updateAccountsList({
+      id: this.id,
       name
     })
     // also log user in
@@ -82,7 +93,7 @@ class Wallet {
   }
 
   /**
-    * Log a user into a specific profile
+    * Log a user into a specific account
     *
     * @param {string} userId - The user identifier
     * @param {string} passphrase - The user's passphrase
@@ -90,7 +101,6 @@ class Wallet {
   async login (userId, passphrase) {
     try {
       this.id = userId
-      this.did = `did:akasha:${this.id}`
       this.store = new SecureStore.Store(this.id, passphrase)
       await this.store.init()
 
@@ -108,7 +118,7 @@ class Wallet {
   }
 
   /**
-   * Log an user out of a specific profile
+   * Log an user out of a specific account
    */
   async logout () {
     if (this.hub) await this.cleanUp(this.hub)
@@ -116,37 +126,22 @@ class Wallet {
     this.elector = undefined
     this.hub = undefined
     this.id = undefined
-    this.did = undefined
     this.store.close()
     this.store = undefined
   }
 
   /**
-   * Return the full profile for the current user
+   * Return the account data for the current user
    *
-   * @returns {Promise<Object>} - A promise that contains the profile object
+   * @returns {Promise<Object>} - A promise that contains the account object
    */
-  async profile () {
+  async account () {
     this.isLoggedIn()
-    return this.store.get('profile')
+    return this.store.get('account')
   }
 
   /**
-   * Save full profile for the current user
-   *
-   * @param {string} oldPass - The current password
-   * @returns {Promise} - A promise that resolves once the operation has completed
-   */
-  async updateProfile (data) {
-    this.isLoggedIn()
-    if (!data) {
-      throw new Error('No profile data present')
-    }
-    return this.store.set('profile', data)
-  }
-
-  /**
-    * Update the passphrase that protects the encryption key for a profile
+    * Update the passphrase that protects the encryption key for an account
     *
     * @param {string} oldPass - The current password
     * @param {string} newPass - The new password
@@ -161,100 +156,120 @@ class Wallet {
   }
 
   /**
-   * Return the current list of profiles
+   * Return the public list of accounts
    */
-  publicProfiles () {
-    const profiles = []
-    const ids = Object.keys(this.profiles)
+  async publicAccounts () {
+    const publics = []
+    const accounts = await SecureStore._idb.get('accounts') || {}
+
+    const ids = Object.keys(accounts)
     if (ids.length === 0) {
-      return profiles
+      return publics
     }
     ids.forEach(id => {
-      profiles.push({
+      publics.push({
         id,
-        name: this.profiles[id].name,
-        picture: this.profiles[id].picture
+        name: accounts[id].name,
+        picture: accounts[id].picture
       })
     })
-    return profiles
+    return publics
   }
 
   /**
-    * Update the list of profiles for a given userID
+    * Update the public list of accounts
     *
-    * @param {string} userId - The user identifier
-    * @param {Object} data - The user's (public) profile that is used when
+    * @param {Object} account - The user's (public) account info that is used when
     * building the list
     * @returns {Promise} - The promise that resolves upon successful completion of the
     * data store operation
     */
-  async updateProfileList (userId, data) {
-    if (!data.name) {
-      throw new Error('Missing name from profile')
+  async updateAccountsList (account) {
+    if (!account.id || !account.name) {
+      throw new Error('Missing parameters from public account data')
     }
     try {
-      this.profiles[userId] = {
-        name: data.name,
-        picture: data.picture || undefined
+      this.accounts = await SecureStore._idb.get('accounts')
+      if (!this.accounts) {
+        this.accounts = {}
       }
-      // Use the raw idb object to set the profiles in the default (public) store
-      await SecureStore._idb.set('profiles', this.profiles)
+      this.accounts[account.id] = {
+        name: account.name,
+        picture: account.picture || undefined
+      }
+      // Use the raw idb object to set the accounts in the default (public) store
+      await SecureStore._idb.set('accounts', this.accounts)
     } catch (e) {
       throw new Error(e)
     }
   }
 
   /**
-   * Remove a local user profile
+   * Update private account information
    *
-   * @param {string} The user's profile ID
+   * @param {Object} data - The account data to be stored
+   * @returns {Promise} - A promise that resolves once the operation has completed
    */
-  async removeProfile (id) {
+  async updateAccount (data) {
     this.isLoggedIn()
-    if (!id) {
-      throw new Error('No profile id provided')
+    if (!data) {
+      throw new Error('Missing attributes')
     }
     try {
-      delete this.profiles[id]
-      await SecureStore._idb.set('profiles', this.profiles)
+      return this.store.set('account', data)
+    } catch (e) {
+      throw new Error(e.message)
+    }
+  }
+
+  /**
+   * Remove the current user account
+   *
+   * @param {string} The user's account ID
+   */
+  async removeAccount () {
+    this.isLoggedIn()
+    try {
+      delete this.accounts[this.id]
+      await SecureStore._idb.set('accounts', this.accounts)
     } catch (e) {
       throw new Error(e)
     }
     await this.store.clear()
-    // TODO: remove the db and store (needs upstream implementation in idbkeyval)
+    // TODO: remove the empty db and store (needs upstream implementation in idbkeyval)
     await this.logout()
   }
 
   /**
-   * Export current profile and all the apps and claims that go with it
+   * Export current account and all the apps and claims that go with it
    * as a single JSON object.
    *
    * @returns {Promise<Object>} - A promise containing the exported data
    */
-  async exportProfile () {
+  async exportAccount () {
     this.isLoggedIn()
     return {
       id: this.id,
-      publicProfile: this.profiles[this.id],
+      publicAccount: this.accounts[this.id],
       store: await this.store.export()
     }
   }
 
   /**
-   * Import a profile and all the apps and claims that go with it
+   * Import a account and all the apps and claims that go with it
    * as a single JSON object.
-   * ATTENTION: it will overwrite any existing profile with the same
+   * ATTENTION: it will overwrite any existing account with the same
    * id!
    *
    * @param {Object} data - A JSON object with the encrypted dump
    * @param {string} passphrase - The passphrase that encrypts the data
-   * @param {string} name - Profile name (if provided can be used to
-   * import the data under a new profile name)
+   * @param {string} name - Account name (if provided can be used to
+   * import the data under a new account name)
    *
    * @returns {Promise} - The promise that resolves upon successful
    * completion of the import operation
    */
-  async importProfile (data, passphrase, name) {
+  async importAccount (data, passphrase, name) {
     if (!passphrase) {
       throw new Error('Password is required')
     }
@@ -267,25 +282,112 @@ class Wallet {
     await store.import(data.store)
     store.close()
 
-    // also update list of profiles
-    const publicProfile = data.publicProfile || {}
+    // also update list of accounts
+    const publicAccount = data.publicAccount || {}
     // specify/update name if so desired
     if (name) {
-      publicProfile.name = name
+      publicAccount.name = name
     }
+    // make sure we have the id in the account info
+    publicAccount.id = data.id
 
-    return this.updateProfileList(data.id, publicProfile)
+    return this.updateAccountsList(publicAccount)
   }
 
-  // Return the current DID
-  currentDID () {
-    return this.did
+  /* ------------- Personas API ------------- */
+
+  /**
+   * Get the data for a given persona
+   *
+   * @param {string} id - The persona id to lookup
+   * @returns {Object} - An object containing all the personas and their data
+   */
+  async persona (id) {
+    this.isLoggedIn()
+    const personas = await this.store.get('personas')
+    return personas[id]
+  }
+
+  /**
+   * Get the list of personas for the current account
+   *
+   * @returns {Object} - An object containing all the personas and their data
+   */
+  async personas () {
+    this.isLoggedIn()
+    const personas = await this.store.get('personas') || {}
+
+    const ids = Object.keys(personas)
+    if (ids.length === 0) {
+      return []
+    }
+    const list = []
+    ids.forEach(id => {
+      list.push(personas[id])
+    })
+    return list
+  }
+
+  /**
+   * Add a new persona
+   *
+   * @param {Object} persona - The persona data to be stored
+   * @returns {Promise} - A promise that resolves once the operation has completed
+   */
+  async addPersona (persona) {
+    this.isLoggedIn()
+    if (!persona || !persona.personaName) {
+      throw new Error('Missing attributes')
+    }
+    // first we generate a new ID for the persona
+    persona.id = WebCrypto.genId()
+    return this.updatePersona(persona)
+  }
+
+  /**
+   * Update persona information
+   *
+   * @param {Object} persona - The persona data to be stored
+   * @returns {Promise} - A promise that resolves once the operation has completed
+   */
+  async updatePersona (data) {
+    this.isLoggedIn()
+    if (!data || !data.id || !data.personaName) {
+      throw new Error('Missing attributes')
+    }
+    try {
+      const personas = await this.store.get('personas') || {}
+      personas[data.id] = data
+      return this.store.set('personas', personas)
+    } catch (e) {
+      throw new Error(e.message)
+    }
+  }
+
+  /**
+   * Remove a specific persona
+   *
+   * @param {string} id - The persona id to remove
+   * @returns {Promise} - A promise that resolves once the operation has completed
+   */
+  async removePersona (id) {
+    this.isLoggedIn()
+    if (!id) {
+      throw new Error('No persona id provided')
+    }
+    try {
+      const personas = await this.store.get('personas')
+      delete personas[id]
+      return this.store.set('personas', personas)
+    } catch (e) {
+      throw new Error(e)
+    }
   }
 
   /* ------------- Requests API ------------- */
 
   /**
-   * Handler for the profile refresh operations
+   * Handler for the refresh operation
    *
    * @param {Object} data - The request data coming from the app
    */
@@ -305,8 +407,12 @@ class Wallet {
         key: localData.key,
         nonce: req.nonce
       }
-      await this.sendClaim(claim, localData.attributes, true)
-      debug(`Sent updated claim!`)
+      try {
+        await this.sendClaim(claim, true)
+        debug(`Sent updated claim!`)
+      } catch (e) {
+        console.log(e)
+      }
     } catch (e) {
       debug(e)
     }
@@ -365,22 +471,26 @@ class Wallet {
   /**
    * Add an app to the local list of allowed apps
    *
-   * @param {string} token The token specific to this app
-   * @param {Object} appInfo An object describing the app
+   * @param {Object} req - The request coming from the client app
+   * @param {string} personaId - The persona id used for this app
    * @returns {Promise} - The promise that resolves upon successful completion of the
    * data store operation
    */
-  async addApp (token, appInfo) {
+  async addApp (req, personaId, attributes) {
     this.isLoggedIn()
     // TODO: validate appInfo schema before storing
-    if (!token || !appInfo) {
+    if (!req || !req.token || !req.appInfo || !personaId || !attributes) {
       throw new Error('Missing parameter when adding app')
     }
-    const exists = await this.store.get(token)
+    const exists = await this.store.get(req.token)
     if (!exists) {
       try {
         const apps = await this.store.get('apps') || {}
-        apps[token] = appInfo
+        apps[req.token] = {
+          persona: personaId,
+          appInfo: req.appInfo,
+          attributes
+        }
         return this.store.set('apps', apps)
       } catch (e) {
         throw new Error(e)
@@ -412,9 +522,31 @@ class Wallet {
   }
 
   /**
-   * Return the list all apps currently allowed
+   * Return the list all apps currently allowed for a given persona
    */
-  async apps () {
+  async apps (personaId) {
+    this.isLoggedIn()
+    let apps
+    try {
+      apps = await this.store.get('apps') || {}
+    } catch (e) {
+      throw new Error(e)
+    }
+    const list = []
+    const ids = Object.keys(apps)
+
+    const matching = ids.filter(id => { return apps[id].persona === personaId })
+    matching.forEach(id => {
+      apps[id].id = id
+      list.push(apps[id])
+    })
+    return list
+  }
+
+  /**
+   * Return the all data for a given app ID
+   */
+  async appInfo (token) {
     this.isLoggedIn()
     let apps
     try {
@@ -422,7 +554,7 @@ class Wallet {
     } catch (e) {
       throw new Error(e)
     }
-    return apps || {}
+    return apps[token] || {}
   }
 
   /**
@@ -485,15 +617,15 @@ class Wallet {
   }
 
   /**
-    * Send a claim with profile attributes
+    * Send a claim with persona attributes
     *
     * @param {Object} req - The request coming from the client app
-    * @param {Object} attributes - An object containing profile attributes
+    * @param {Object} attributes - An object containing persona attributes
     * @param {string} [mode] - The mode of the key to import (default 'AES-GCM')
     * @returns {Promise<Object>} - The data used for the claim once it has been sent,
     * to be stored by the wallet app
     */
-  async sendClaim (req, attributes = {}, allowed) {
+  async sendClaim (req, allowed) {
     this.isLoggedIn()
     // init hub connection
     const hub = initHub(this.hubUrls)
@@ -513,12 +645,12 @@ class Wallet {
       nonce: req.nonce
     }
     if (allowed) {
-      msg.did = this.did
-      msg.claim = await this.prepareClaim(attributes)
+      msg.did = this.did()
+      msg.claim = await this.prepareClaim(token)
       msg.token = token
       msg.refreshEncKey = refreshEncKey
       // store claim
-      await this.addClaim(token, refreshEncKey, attributes)
+      await this.addClaim(token, refreshEncKey)
     }
     const encryptedMsg = await WebCrypto.encrypt(key, msg, 'base64')
     // broadcast msg back to the app
@@ -529,27 +661,44 @@ class Wallet {
   }
 
   // TODO: decide if we continue to use VCs or not
-  async prepareClaim (attributes) {
+  /**
+   * Prepare a claim before being sent
+   *
+   * @param {string} token - The app token
+   * @returns {Object} - The claim object
+   * data store operation
+   */
+  async prepareClaim (token) {
     this.isLoggedIn()
-    if (!attributes || attributes.length === 0) {
-      throw new Error('Missing attributes when preparing claim')
-    }
-    const credential = {}
+    try {
+      // get app details for this token
+      const app = await this.appInfo(token)
 
-    const profile = await this.profile()
-    attributes.forEach(attr => {
-      if (profile[attr]) credential[attr] = profile[attr]
-    })
-    // also add the did
-    credential.id = this.did
-    // return the formatted VC
-    return {
-      '@context': ['https://www.w3.org/2018/credentials/v1', 'https://schema.org/'],
-      type: ['VerifiableCredential', 'IdentityCredential'],
-      issuer: this.did,
-      issuanceDate: new Date().toISOString(),
-      credentialSubject: credential,
-      proof: {}
+      if (!app.attributes || app.attributes.length === 0) {
+        throw new Error('Missing attributes when preparing claim')
+      }
+      const credential = {}
+      const persona = await this.persona(app.persona)
+
+      Object.keys(app.attributes).forEach(attr => {
+        if (app.attributes[attr]) {
+          credential[attr] = persona[attr]
+        }
+      })
+      // also add the did
+      const did = this.did()
+      credential.id = did
+      // return the formatted VC
+      return {
+        '@context': ['https://www.w3.org/2018/credentials/v1', 'https://schema.org/'],
+        type: ['VerifiableCredential', 'IdentityCredential'],
+        issuer: did,
+        issuanceDate: new Date().toISOString(),
+        credentialSubject: credential,
+        proof: {}
+      }
+    } catch (e) {
+      throw new Error(e.message)
     }
   }
 
@@ -558,18 +707,17 @@ class Wallet {
    *
    * @param {string} token The token identifying the app
    * @param {string} key The encryption key used for the next request
-   * @param {Object} attributes The profile attributes shared with the app
+   * @param {Object} attributes The persona attributes shared with the app
    * @returns {Promise} - The promise that resolves upon successful completion of the
    * data store operation
    */
-  addClaim (token, key, attributes) {
+  addClaim (token, key) {
     this.isLoggedIn()
-    if (!token || !key || !attributes) {
+    if (!token || !key) {
       throw new Error('Missing parameter when adding claim')
     }
     return this.store.set(token, {
-      key: key,
-      attributes: attributes
+      key: key
     })
   }
 
@@ -598,9 +746,10 @@ class Wallet {
   }
 
   isLoggedIn () {
-    if (!this.did) {
+    if (!this.id) {
       throw new Error('Not logged in')
     }
+    return true
   }
 
   /**

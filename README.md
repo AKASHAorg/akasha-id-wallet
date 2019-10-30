@@ -1,6 +1,6 @@
 # akasha-id-wallet
 [DID](https://w3c-ccg.github.io/did-spec/) wallet library for AKASHA.id, which handles requests
-for the user's profile attributes. It is meant to be used by the AKASHA.id application to
+for a user's persona attributes. It is meant to be used by the AKASHA.id application to
 exchange profile attributes with 3rd party applications.
 
 ## Install
@@ -42,16 +42,15 @@ deploying your own instances.
     * https://signalhub-jccqtwhdwc.now.sh
     * https://signalhub-hzbibrznqa.now.sh
 
+## Handling accounts
 
-## Handling profiles
+When using the app for the first time, you will go through a signup process, in which you provide a `name` for your account as well as a `passphrase` that will be used to encrypt the local data stored by the app. The concept is very similar to creating and logging into a local account on your computer.
 
-The wallet allows us to have multiple profiles or "personas", perhaps describing us in different ways. When using the app for the first time, you will go through a "signup"-like process, in which you provide a `name` for that profile and a `passphrase` that will be used to encrypt the local data stored by the app. The concept is very similar to creating and logging into a local account on your computer.
-
-### Listing all profiles before login/signup
+### Listing all accounts before login/signup
 
 ```js
-const profiles = wallet.publicProfiles()
-// console.log(profiles) -> []
+const list = wallet.publicAccounts()
+// console.log(list) -> []
 ```
 
 ### Signup
@@ -59,25 +58,25 @@ const profiles = wallet.publicProfiles()
 Once the `signup()` call has completed the user will be logged in by default. 
 
 ```js
-const profileName = 'jane'
+const accountName = 'jane'
 const passphrase = 'some super secure pass'
 
-const id = await wallet.signup(profileName, passphrase)
-// jane is now logged in, you can now list apps or do something with the profile ID
+const id = await wallet.signup(accountName, passphrase)
+// jane is now logged in, you can now list apps or do something with the account ID
 ```
 
 ### Login
 
 ```js
-const profiles = wallet.publicProfiles()
-// console.log(profiles) -> [{id: "5285c2476202a56b05e1be3b4222402d", user: "test", picture: "https://example.org/jane.jpg"}]
+const list = wallet.publicAccounts()
+// console.log(list) -> [{id: "5285c2476202a56b05e1be3b4222402d", user: "test", picture: "https://example.org/jane.jpg"}]
 
-// let's fake select the profile
-const user = profiles[0]
+// let's simulate selecting the account
+const user = list[0]
 
 // get the passphrase from a password input field
 
-// always use the ID to call the login() method, as profile names may change in the future
+// always use the ID to call the login() method, as account names can be changed by users
 await wallet.login(user.id, passphrase)
 
 // do something like listing apps, etc.
@@ -89,68 +88,65 @@ await wallet.login(user.id, passphrase)
 await wallet.logout()
 ```
 
-### Update public profile used in the list
+### Update current account information used in the public list
 
 ```js
-const profiles = wallet.publicProfiles()
-// console.log(profiles) -> [{id: "5285c2476202a56b05e1be3b4222402d", user: "test", picture: "https://example.org/jane.jpg"}]
+const list = wallet.publicAccounts()
+// console.log(list) -> [{id: "5285c2476202a56b05e1be3b4222402d", user: "test", picture: "https://example.org/jane.jpg"}]
 
-// pick jane's profile
-const janeProfile = profiles[0]
-// let's change the profile name
-janeProfile.name = 'janedoe'
+// pick jane's account
+const jane = list[0]
+// let's change the account name
+jane.name = 'janedoe'
 
-await wallet.updateProfileList (userId, data)
+await wallet.updateAccountsList(jane)
 ```
 
-### Load the current private profile
-
-This is the full profile that contains a list of attributes which can be used to create a claim
-for a 3rd party application.
+### Load the current (private) account data
 
 ```js
-const userProfile = await wallet.profile()
-// console.log(userProfile) -> { givenName: 'foo', email: 'foo@bar.org' }
+const account = await wallet.account()
+// console.log(account) -> { givenName: 'foo', email: 'foo@bar.org' }
 ```
 
-### Update the current private profile
+### Update the current (private) account data
 
 ```js
-const profile = {
-    givenName: 'foo',
-    email: 'foo@example.org' // we changed the email
+const account = {
+    name: 'foo',
+    picture: 'https://example.org/picture.jpg'
 }
-await wallet.updateProfile(profile)
+await wallet.updateAccount(account)
 ```
 
-### Remove a profile
+### Remove an account
+
+The user needs to be logged into the current account before it can be removed.
 
 ```js
-const profiles = wallet.publicProfiles()
-// console.log(profiles) -> [{id: "5285c2476202a56b05e1be3b4222402d", user: "test", picture: "https://example.org/jane.jpg"}]
-// pick jane's profile
-const janeProfile = profiles[0]
+await wallet.removeAccount()
 
-await wallet.removeProfile(janeProfile.id)
+const list = wallet.publicAccounts()
+// console.log(list) -> []
 ```
 
-### Export a profile
+### Export an account
 
 It will export the encrypted data as one JSON object.
 
 ```js
-const dump = await wallet.export()
+const dump = await wallet.exportAccount()
 ```
 
-### Import a profile
+### Import an account
 
-The optional `profileName` parameter can be used to import the profile under a different
+The optional `name` parameter can be used to import the account under a different
 name than the original one. Note that the unique ID remains the same!
 
 ```js
-const profileName = 'jane from backup'
-// using the dump object and the same passphrase used when creating the profile above
-await wallet.import(dump, pass, profileName)
+const name = 'jane from backup'
+// using the dump object and the same passphrase used when creating the account above
+await wallet.importAccount(dump, pass, name)
 ```
 
 ### Update the passphrase that is used to protect the encryption key
@@ -159,6 +155,51 @@ await wallet.import(dump, pass, profileName)
 await Wallet.updatePassphrase(oldPass, newPass)
 ```
 
+## Handling personas for each account
+
+The wallet allows an account to have multiple personas, describing us in different ways.
+
+### Add a new persona
+
+When creating a new persona, it is **mandatory** to at least provide the `personaName` attribute.
+
+```js
+const persona = {
+    personaName: 'social'
+}
+await Wallet.addPersona(persona)
+```
+
+### Get the list of personas for the current account
+
+Returns an array of objects contaning persona information.
+
+```js
+const list = await Wallet.personas()
+// console.log(list) -> [ { personaName: 'social', id: '80a60dd67812d3169fc6d852d90e80c3' } ]
+
+```
+
+### Get the data for a given persona ID
+
+```js
+const persona = await Wallet.persona(personaID)
+```
+
+### Update persona information for a given persona ID
+
+```js
+const data = await Wallet.persona(personaID)
+data.personaName = 'work' // used to be "social"
+}
+await wallet.updatePersona(data)
+```
+
+### Remove a specific persona based on the ID of that persona
+
+```js
+await Wallet.removePersona(personaID)
+```
 
 ## Handling new apps
 
@@ -188,10 +229,10 @@ The `request` contents will look similar to the object below.
 }
 ```
 
-The wallet app can now use the `appInfo` data to display a modal/page to the user, informing them about the app that is currently requesting access to the profile elements. At the same time, it
+The wallet app can now use the `appInfo` data to display a modal/page to the user, informing them about the app that is currently requesting access to the persona elements. At the same time, it
 can also inform the user at to what attributes they should disclose specifically for this app --
-e.g. `attributes: ['name', 'email']` above -- out of all the profile attributes they may have in
-their AKASHA.id profile.
+e.g. `attributes: ['name', 'email']` above -- out of all the persona attributes they may have in
+their AKASHA.id persona.
 
 ```js
 ...
@@ -200,39 +241,44 @@ their AKASHA.id profile.
 
 ...
 
-// collect all the selected attributes in an attributes object
-const attributes = ['givenName', 'email']
+// collect all the selected attributes in an attributes object based on what the user
+// has decided to allow (in this case only sharing the name and not the email)
+const attributes = {
+    name: true,
+    email: false
+}
 
 ...
 
-// don't forget to add the app to the user's list of allowed apps
-await wallet.addApp(request.token, request.appInfo)
+// add the app to the user's list of allowed apps
+// the personaID must also be specified
+await wallet.addApp(request, personaID, attributes)
 
-// send the claim
-await wallet.sendClaim(request, attributes, true) 
+// accept the request and send the claim
+await wallet.sendClaim(request, true) 
 ```
 
-You can also use `false` and `null/empty` attributes obj to deny a request. In this case you will
-not have to save the app to the list though.
+You can also use `false` and `null/empty` attributes obj to deny a request. In this case you should
+not have to save the app to the list before sending the claim.
 
 ```js
-await wallet.sendClaim(request, null, false)
+await wallet.sendClaim(request, false)
 ```
 
-### List all apps for a user
+### List all apps for a given persona ID
 
-Returns a map of app tokens to app description objects.
+Returns an array of app objects.
 
 ```js
-const apps = await wallet.apps()
+const apps = await wallet.apps(personaID)
 
-// console.log(apps) -> {b783046f15ba3c8e9de9bbf2797cc87a: {name: "AKASHA.world", description: "The super cool AKASHA World app!", icon: "https://app.akasha.world/icon.png", url: "https://app.akasha.world"}}
+// console.log(apps) -> [ { id: "4962391a0dbf2abee7e0ea4d07814aa16cc2cefc", persona: "80a60dd67812d3169fc6d852d90e80c3", appInfo: { name: "AKASHA.world", description: "The super cool AKASHA World app!", icon: "https://app.akasha.world/icon.png", url: "https://app.akasha.world" }, attributes: { name: true, email: true, address: false } } ]
 
 ```
 
 ### Remove an app
 
-To remove a claim created for a specific app, you can use the app token when calling `removeApp()`.
+To remove an app, you can use the app token when calling `removeApp()`.
 
 ```js
 await wallet.removeApp(token)
