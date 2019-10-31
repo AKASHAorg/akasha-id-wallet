@@ -197,6 +197,8 @@ await wallet.updatePersona(data)
 
 ### Remove a specific persona based on the ID of that persona
 
+Please note that during this operation it will also remove **all** applications that were registered and using this particular persona.
+
 ```js
 await Wallet.removePersona(personaID)
 ```
