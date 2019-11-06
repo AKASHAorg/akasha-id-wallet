@@ -813,6 +813,10 @@ describe('AKASHA ID', function () {
           chai.assert.equal(response.did, Wallet.did())
           chai.assert.equal(response.token, msg.token)
           chai.assert.isDefined(response.claim)
+          chai.assert.isDefined(response.claim.credentialSubject)
+          attr.forEach(at => {
+            chai.assert.isDefined(response.claim.credentialSubject[at])
+          })
           // save this client claim for refresh test
           clientClaim = response
           await Wallet.logout()
@@ -822,6 +826,7 @@ describe('AKASHA ID', function () {
     })
 
     it('Should successfully refresh a claim', async () => {
+      const attr = ['name', 'email']
       const accounts = await Wallet.publicAccounts()
       await Wallet.login(accounts[0].id, accountPass)
       await sleep(200)
@@ -836,6 +841,10 @@ describe('AKASHA ID', function () {
           chai.assert.equal(response.token, clientClaim.token)
           chai.assert.notEqual(response.refreshEncKey, clientClaim.refreshEncKey)
           chai.assert.equal(response.refreshEncKey, claim.key)
+          chai.assert.isDefined(response.claim.credentialSubject)
+          attr.forEach(at => {
+            chai.assert.isDefined(response.claim.credentialSubject[at])
+          })
           resolve()
         })
       })

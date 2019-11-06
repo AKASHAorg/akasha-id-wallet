@@ -415,7 +415,7 @@ class Wallet {
       }
       try {
         await this.sendClaim(claim, true)
-        debug(`Sent updated claim!`)
+        debug('Sent updated claim!', claim)
       } catch (e) {
         console.log(e)
       }
@@ -497,6 +497,7 @@ class Wallet {
           appInfo: req.appInfo,
           attributes
         }
+        debug('Stored app')
         return this.store.set('apps', apps)
       } catch (e) {
         throw new Error(e)
@@ -685,6 +686,8 @@ class Wallet {
       }
       const credential = {}
       const persona = await this.persona(app.persona)
+
+      debug('Using attributes:', app.attributes)
 
       Object.keys(app.attributes).forEach(attr => {
         if (app.attributes[attr]) {
