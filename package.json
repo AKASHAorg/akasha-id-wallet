@@ -25,7 +25,7 @@
         "mocha-headless-chrome": "^2.0.3",
         "standard": "^13.1.0",
         "webpack": "^4.39.2",
-        "webpack-cli": "^3.3.6"
+        "webpack-cli": "^3.3.12"
     },
     "author": "Andrei Sambra <andrei.sambra@akasha.world> (https://akasha.org/)"
 }
